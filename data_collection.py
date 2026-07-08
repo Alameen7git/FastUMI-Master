@@ -19,7 +19,6 @@ except ImportError:
 
 import torch
 import cv2
-import h5py
 import argparse
 from time import sleep, time
 import numpy as np
@@ -34,7 +33,6 @@ import csv
 from scipy.spatial.transform import Rotation as R
 import threading
 from collections import deque
-import pandas as pd
 
 # ── Config ────────────────────────────────────────────────────────────────────
 with open('config/config.json', 'r') as f:

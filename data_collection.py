@@ -6,6 +6,7 @@ import termios
 import tty
 import atexit
 import queue
+import shutil
 
 # Optional — used for live CPU/memory display during recording and saving.
 # Falls back to system load average (always available, zero extra cost) if
@@ -473,190 +474,26 @@ def save_episode(episode_number, video_path, episode_start_time, frame_ts_writer
         if name.endswith('.jpg'):
             os.remove(os.path.join(IMAGE_PATH, name))
 
-    timestamps = pd.read_csv(TIMESTAMP_PATH_TEMP)
-    downsampled = timestamps.iloc[::3].reset_index(drop=True)
-    cap = cv2.VideoCapture(video_path)
+    # Raw files are already complete on disk (written by write_video/write_trajectory
+    # threads during recording). Just rename them to permanent per-episode names
+    # and move on immediately -- conversion happens later via convert_episodes.py.
+    raw_dir = os.path.join(data_path, 'raw', f'episode_{episode_number}')
+    os.makedirs(raw_dir, exist_ok=True)
 
-    data_dict = {'/observations/qpos': [], '/action': []}
-    for cam in cfg['camera_names']:
-        data_dict[f'/observations/images/{cam}'] = []
+    final_video_path = os.path.join(raw_dir, 'video.mp4')
+    final_traj_path  = os.path.join(raw_dir, 'trajectory.csv')
+    final_ts_path    = os.path.join(raw_dir, 'timestamps.csv')
 
-    print('  Processing frames...', flush=True)
-    frames_start_t = time()  # timing: frame extraction phase
-    # PERF FIX: the previous version called cap.set(CAP_PROP_POS_FRAMES, idx)
-    # before every single frame read. For compressed video (h264/mp4), each
-    # seek forces the decoder back to the nearest keyframe and re-decodes
-    # forward from there — done ~700 times for a 35s take, that repeated
-    # keyframe-seek overhead is almost certainly what turned a 35s recording
-    # into a ~2 minute save. Since the frames we want are already known and
-    # strictly increasing (every 3rd frame), we read the video straight
-    # through once and just keep the frames we need — each frame is decoded
-    # exactly once, no re-seeking.
-    target_indices = downsampled['Frame Index'].astype(int).tolist()
-    target_iter = iter(target_indices)
-    next_target = next(target_iter, None)
-    frame_counter = 0
-    frames_extracted = 0
-    decode_failed = False
-    while next_target is not None:
-        ret, frame = cap.read()
-        if not ret:
-            # A frame failed to decode partway through the video. This is
-            # NOT the same as the GoPro/T265 dropout the watchdog catches —
-            # that happens live, during recording, when no new data arrives.
-            # This happens here, after recording, while reading back a file
-            # that's already on disk — meaning something is wrong with the
-            # file itself (disk ran low on space mid-write, a malformed
-            # frame got written, or the storage medium has an error).
-            decode_failed = True
-            break
-        if frame_counter == next_target:
-            cv2.imwrite(os.path.join(IMAGE_PATH, f"{int(frame_counter / 3)}.jpg"), frame)
-            for cam in cfg['camera_names']:
-                data_dict[f'/observations/images/{cam}'].append(frame)
-            frames_extracted += 1
-            next_target = next(target_iter, None)
-        frame_counter += 1
-    cap.release()
-    frames_elapsed = time() - frames_start_t
-    print(f'  Frame extraction: {frames_elapsed:.1f}s ({frames_extracted} frames)', flush=True)
+    shutil.move(video_path, final_video_path)
+    shutil.move(TRAJECTORY_PATH_TEMP, final_traj_path)
+    shutil.move(TIMESTAMP_PATH_TEMP, final_ts_path)
 
-    if decode_failed:
-        total_expected = len(target_indices)
-        print(f"\n  ⚠  Frame read failed after {frames_extracted}/{total_expected} frames.")
-        print('  This usually means the video file itself is damaged — check disk space')
-        print('  and storage health. This episode cannot be recovered.')
-        print('  C = go back and re-record this episode')
-        print('  E = end session')
-        drain_key_queue()
-        choice = wait_key(['c', 'e'])
-        print('  ↺ Episode discarded — nothing saved.\n')
-        if choice == 'e' or choice is None:
-            session_done.set()
-        _stop_monitor()
-        return None
-
-    # SAFETY BACKSTOP: independent of the live in-recording detector — this
-    # re-checks the actual frames about to be saved, right before they're
-    # written, using the SAME frame-to-frame comparison logic (not a
-    # separate single-frame check) so both layers agree on what "dead feed"
-    # means. Catches it even if the live detector had a gap for any reason.
-    frozen_count = 0
-    saved_images = data_dict[f'/observations/images/{cfg["camera_names"][0]}']
-    prev_sample_check = None
-    for img in saved_images:
-        sample_check = img[::20, ::20].mean(axis=2)
-        if prev_sample_check is not None:
-            diff = np.abs(sample_check.astype(np.float32) - prev_sample_check.astype(np.float32)).mean()
-            if diff < TEMPORAL_DIFF_THRESH:
-                frozen_count += 1
-        prev_sample_check = sample_check
-    frozen_ratio_saved = frozen_count / max(frames_extracted - 1, 1)
-    if frozen_ratio_saved >= SAVE_FROZEN_RATIO_WARN:
-        print(f"\n  ⚠  {frozen_ratio_saved*100:.0f}% of this episode's {frames_extracted} frames look frozen/repeated.")
-        print('  This usually means the camera was disconnected during some or all of')
-        print('  this take. This episode cannot be trusted and will not be saved.')
-        print('  C = go back and re-record this episode')
-        print('  E = end session')
-        drain_key_queue()
-        choice = wait_key(['c', 'e'])
-        print('  ↺ Episode discarded — nothing saved.\n')
-        if choice == 'e' or choice is None:
-            session_done.set()
-        _stop_monitor()
-        return None
-
-    # Only recorded once we know this episode is being kept (not discarded
-    # above) — writing this unconditionally at the top of the function would
-    # log a row for an episode number that then gets reused by a discarded
-    # take's redo, recreating the exact orphaned-row problem redo used to
-    # cause before it was removed.
-    print('  Matching trajectory...', flush=True)
-    traj_start_t = time()  # timing: trajectory-matching phase
-    trajectory = pd.read_csv(TRAJECTORY_PATH_TEMP)
-    trajectory['Timestamp'] = trajectory['Timestamp'].astype(float)
-
-    # Computed fully in memory first — nothing written to states.csv or
-    # frame_timestamps.csv yet, so the T265 backstop below can still safely
-    # discard without leaving any trace on disk (same principle as the
-    # video backstop above, just applied to pose data instead of images).
-    matched_rows = []  # (idx, traj_timestamp, frame_timestamp, pos_quat)
-    for idx, row in downsampled.iterrows():
-        closest = trajectory.iloc[(trajectory['Timestamp'] - row['Timestamp']).abs().argmin()]
-        pos_quat = [
-            closest['Pos X'], closest['Pos Y'], closest['Pos Z'],
-            closest['Q_X'],   closest['Q_Y'],   closest['Q_Z'], closest['Q_W']
-        ]
-        matched_rows.append((idx, closest['Timestamp'], row['Timestamp'], pos_quat))
-    traj_elapsed = time() - traj_start_t
-    print(f'  Trajectory matching: {traj_elapsed:.1f}s', flush=True)
-
-    # T265 SAFETY BACKSTOP: same principle as the video one above, applied
-    # to the actual matched poses about to be saved. Independent of the
-    # live in-recording detector.
-    frozen_pose_count = 0
-    prev_pose_check = None
-    for _, _, _, pos_quat in matched_rows:
-        pose_check = np.array(pos_quat)
-        if prev_pose_check is not None:
-            pose_diff = np.linalg.norm(pose_check - prev_pose_check)
-            if pose_diff < POSE_DIFF_THRESH:
-                frozen_pose_count += 1
-        prev_pose_check = pose_check
-    frozen_pose_ratio_saved = frozen_pose_count / max(len(matched_rows) - 1, 1)
-    if frozen_pose_ratio_saved >= SAVE_FROZEN_RATIO_WARN:
-        print(f"\n  ⚠  {frozen_pose_ratio_saved*100:.0f}% of this episode's trajectory looks frozen/repeated.")
-        print('  This usually means the T265 stopped updating during some or all of')
-        print('  this take. This episode cannot be trusted and will not be saved.')
-        print('  C = go back and re-record this episode')
-        print('  E = end session')
-        drain_key_queue()
-        choice = wait_key(['c', 'e'])
-        print('  ↺ Episode discarded — nothing saved.\n')
-        if choice == 'e' or choice is None:
-            session_done.set()
-        _stop_monitor()
-        return None
-
-    # Only now, after BOTH backstops have passed, do we commit anything —
-    # frame_timestamps.csv and states.csv rows are written together, right
-    # before the HDF5 itself, so a discard above never leaves a trace.
     frame_ts_writer.writerow([episode_number, first_frame_ts])
-    for idx, traj_ts, frame_ts, pos_quat in matched_rows:
-        data_dict['/observations/qpos'].append(pos_quat)
-        data_dict['/action'].append(pos_quat)
-        with open(STATE_PATH, 'a', newline='') as f:
-            csv.writer(f).writerow(
-                [idx, episode_start_time, traj_ts, frame_ts] + pos_quat
-            )
 
-    # Episode number is a single in-memory counter, driven by the main loop —
-    # not recomputed from the filesystem here. Since redo can no longer
-    # delete an already-saved file (that path was removed entirely), this
-    # counter only ever goes up, so there's no scenario where it can drift
-    # out of sync with what's actually on disk.
-    dataset_path = os.path.join(data_path, f'episode_{episode_number}.hdf5')
-
-    hdf5_start_t = time()  # timing: HDF5 write phase (mainly gzip compression of images)
-    with h5py.File(dataset_path, 'w', rdcc_nbytes=2 * 1024 ** 2) as root:
-        root.attrs['sim'] = False
-        obs = root.create_group('observations')
-        imgs = obs.create_group('images')
-        for cam in cfg['camera_names']:
-            imgs.create_dataset(
-                cam,
-                data=np.array(data_dict[f'/observations/images/{cam}'], dtype=np.uint8),
-                compression='gzip', compression_opts=4
-            )
-        root.create_dataset('observations/qpos', data=np.array(data_dict['/observations/qpos']))
-        root.create_dataset('action',            data=np.array(data_dict['/action']))
-    hdf5_elapsed = time() - hdf5_start_t
-
-    total_elapsed = time() - save_start_t
-    print(f'  HDF5 write: {hdf5_elapsed:.1f}s', flush=True)
-    print(f'  Saved → {dataset_path}  (total save time: {total_elapsed:.1f}s)', flush=True)
+    print(f'  Episode {episode_number + 1} raw data saved -> {raw_dir}')
+    print(f'  ({os.path.getsize(final_video_path) / 1e6:.1f} MB video)')
     _stop_monitor()
-    return dataset_path
+    return raw_dir
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':

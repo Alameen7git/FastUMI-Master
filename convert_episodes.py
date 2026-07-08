@@ -93,6 +93,7 @@ def main():
     args = parser.parse_args()
 
     data_path = os.path.join(config['device_settings']['data_dir'], 'dataset', args.task)
+    failed_log_path = os.path.join(data_path, 'failed_conversions.log')
     raw_root = os.path.join(data_path, 'raw')
 
     if not os.path.exists(raw_root):
@@ -132,10 +133,15 @@ def main():
             else:
                 print(f'  Episode {episode_idx}: FAILED -- {detail}')
                 failed_count += 1
+                from datetime import datetime
+                with open(failed_log_path, 'a') as f:
+                    f.write(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Episode {episode_idx} | {detail}\n')
 
     print(f'\nConversion complete: {done_count} done, {skipped_count} skipped, {failed_count} failed')
     if failed_count > 0:
         print('Failed episodes were not deleted -- check their raw/ folders and redo if needed.')
+    if failed_count > 0:
+        print(f'Failed episode details logged to: {failed_log_path}')
 
 
 if __name__ == '__main__':

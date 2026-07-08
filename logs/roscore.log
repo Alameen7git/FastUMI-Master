@@ -1,0 +1,238 @@
+
+--- launched 2026-07-07 18:07:20 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/50f4b5a8-7a26-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-31742.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:44077/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [31768][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 50f4b5a8-7a26-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [31778][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 18:12:54 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/17fdc716-7a27-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-32808.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:37377/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [32835][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 17fdc716-7a27-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [32847][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 18:22:06 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/610f1120-7a28-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-33629.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:41331/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [33655][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 610f1120-7a28-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [33665][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 18:26:51 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/0addc818-7a29-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-34202.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:36593/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [34230][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 0addc818-7a29-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [34241][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 18:29:33 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/6b1cb8f6-7a29-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-35176.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:43121/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [35203][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 6b1cb8f6-7a29-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [35215][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 19:15:48 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/e12caa14-7a2f-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-37954.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:45295/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [37984][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to e12caa14-7a2f-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [37994][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m
+
+--- launched 2026-07-07 19:20:29 ---
+source /opt/ros/noetic/setup.bash && exec roscore
+
+... logging to /home/nuc8/.ros/log/88a0e440-7a30-11f1-a33f-eb65331cb183/roslaunch-nuc8-NUC13ANHi7-39569.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+]2;roscore
+[1mstarted roslaunch server http://nuc8-NUC13ANHi7:46729/[0m
+ros_comm version 1.17.4
+
+
+SUMMARY
+========
+
+PARAMETERS
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+
+auto-starting new master
+[1mprocess[master]: started with pid [39597][0m
+[1mROS_MASTER_URI=http://nuc8-NUC13ANHi7:11311/[0m
+]2;roscore http://nuc8-NUC13ANHi7:11311/
+[1msetting /run_id to 88a0e440-7a30-11f1-a33f-eb65331cb183[0m
+[1mprocess[rosout-1]: started with pid [39608][0m
+started core service [/rosout]
+[rosout-1] killing on exit
+[master] killing on exit
+shutting down processing monitor...
+... shutting down processing monitor complete
+[1mdone[0m

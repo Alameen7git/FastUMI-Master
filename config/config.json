@@ -12,11 +12,30 @@
       "cam_height": 1080,
       "camera_names": ["front"],
       "camera_port": 0,
+      "camera": {
+          "video_device": "/dev/elgato",
+          "fps": 60
+      },
       "ros": {
-          "video_topic": "/usb_cam/image_raw",
+          "video_topic": "/usb_cam/image_raw/compressed",
           "trajectory_topic": "/camera/odom/sample",
-          "queue_size": 1000
+          "queue_size": 2
+      },
+      "topic_health": {
+          "video_stale_sec": 1.5,
+          "trajectory_stale_sec": 1.0,
+          "flush_interval_sec": 0.5
       }
+  },
+  "sync": {
+      "frame_stride": 3
+  },
+  "worker": {
+      "poll_interval_sec": 1.0,
+      "nice_level": 15,
+      "stale_lock_minutes": 10,
+      "keep_raw_after_success": false,
+      "parallel_workers": 4
   },
   "data_process_config": {
       "marker_id_0":0,
@@ -46,9 +65,9 @@
       "distances": {
           "marker_max": 552.0,
           "marker_min": 116.0,
-          "gripper_max": 255.0,
+          "gripper_max": 140.0,
           "gripper_min": 0,
-          "flange_to_tcp": 0.172
+          "flange_to_tcp": 244.0
       },
       "start_qpos": [
           0, 0,

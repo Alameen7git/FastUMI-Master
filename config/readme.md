@@ -160,3 +160,22 @@ The following configuration is based on the coordinate system conversion shown i
 This configuration file is essential for setting up the robot's hardware, task parameters, and data processing workflows. Adjust these parameters according to your specific needs to ensure paths and values correctly match your system setup.
 
 For further assistance or questions, please refer to the system documentation or contact the support team.
+
+
+### Data collection 
+* cd FastUMI
+* ./start_collection.sh
+
+(should open four different terminals for ROS,T265, GoPro and data collection)
+
+* Space bar - start and stop the eps
+* R - Redo the ep
+* E/K - to save the eps and kill the session
+
+### Key design points
+* No time limit — episodes run until you press Space/R/E
+* Writer threads drain their buffers before stopping — no frames lost between "Space pressed" and thread exit
+* R discards cleanly — clears both buffers in-memory, doesn't write any HDF5
+* Data format unchanged — same HDF5 structure as before, downstream processing scripts work as-is
+* Ctrl+C is caught by Python's sigint_handler and routed into the key queue as ' ' — so it stops recording but doesn't exit
+

@@ -1,0 +1,10 @@
+
+--- launched 2026-07-07 18:05:51 ---
+echo hello; sleep 3; echo bye
+
+hello
+
+--- launched 2026-07-07 18:06:57 ---
+echo hello; sleep 3; echo bye
+
+hello

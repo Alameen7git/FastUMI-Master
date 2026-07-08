@@ -1,0 +1,147 @@
+
+--- launched 2026-07-07 18:07:28 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task ops_ui_test --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: ops_ui_test  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    5.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    5.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    6.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    6.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    7.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    7.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    8.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    8.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    9.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    9.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   10.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   10.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   11.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   11.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   12.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   12.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   13.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   13.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   14.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   14.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   15.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   15.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   16.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   16.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   17.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   17.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   18.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   18.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   19.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   19.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC   20.0s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 1...
+  Queued → /home/nuc8/FastUMI/dataset/ops_ui_test/raw/episode_0
+  Done. (1/100000 recorded — processing continues in background)
+
+─── Episode 2/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 1/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 18:13:02 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task test8 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: test8  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 0/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 18:22:14 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task topic_health_test2 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: topic_health_test2  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 0/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 18:26:59 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task test3 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: test3  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 0/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 18:29:40 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task test3 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: test3  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 0/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 19:15:55 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task test8 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: test8  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.5s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 1...
+  Queued → /home/nuc8/FastUMI/dataset/test8/raw/episode_0
+  Done. (1/100000 recorded — processing continues in background)
+
+─── Episode 2/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 2...
+  Queued → /home/nuc8/FastUMI/dataset/test8/raw/episode_1
+  Done. (2/100000 recorded — processing continues in background)
+
+─── Episode 3/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 3...
+  Queued → /home/nuc8/FastUMI/dataset/test8/raw/episode_2
+  Done. (3/100000 recorded — processing continues in background)
+
+─── Episode 4/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.5s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 4...
+  Queued → /home/nuc8/FastUMI/dataset/test8/raw/episode_3
+  Done. (4/100000 recorded — processing continues in background)
+
+─── Episode 5/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 4/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.
+
+--- launched 2026-07-07 19:20:36 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 data_collection.py --task test10 --num_episodes 100000
+
+
+FastUMI  |  Robot: UR7E  |  Task: test10  |  Episodes: 100000
+Controls:  Space = start / stop   R = redo episode   E = end session
+
+─── Episode 1/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    5.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    5.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    6.0s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 1...
+  Queued → /home/nuc8/FastUMI/dataset/test10/raw/episode_0
+  Done. (1/100000 recorded — processing continues in background)
+
+─── Episode 2/100000  ───
+  Space = start   R = redo previous   E = end session
+  ● REC    0.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    0.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    1.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    2.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    3.5s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.0s   frames buffered: 0   (Space=stop  R=redo  E=end)  ● REC    4.5s   frames buffered: 0   (Space=stop  R=redo  E=end)
+  Stopped. Finalizing episode 2...
+  Queued → /home/nuc8/FastUMI/dataset/test10/raw/episode_1
+  Done. (2/100000 recorded — processing continues in background)
+
+─── Episode 3/100000  ───
+  Space = start   R = redo previous   E = end session
+
+Session ended.
+
+All done. 2/100000 episodes recorded. Run episode_worker.py (if not already running) to finish processing.

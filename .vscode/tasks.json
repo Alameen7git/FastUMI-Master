@@ -1,0 +1,76 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "FastUMI: 1 roscore",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/.vscode/scripts/1_roscore.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "title": "1: roscore",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "FastUMI: 2 T265",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/.vscode/scripts/2_t265.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "title": "2: T265",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "FastUMI: 3 USB Camera",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/.vscode/scripts/3_camera.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "title": "3: USB Camera",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "FastUMI: 4 Data Collection",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/.vscode/scripts/4_collect.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "title": "4: Data Collection",
+                "focus": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "FastUMI: Stop All",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/stop_collection.sh",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "title": "Stop All",
+                "focus": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "FastUMI: Start All",
+            "dependsOn": [
+                "FastUMI: 1 roscore",
+                "FastUMI: 2 T265",
+                "FastUMI: 3 USB Camera",
+                "FastUMI: 4 Data Collection"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}

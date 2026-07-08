@@ -1,0 +1,34 @@
+
+--- launched 2026-07-07 18:07:27 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783444048.041388]: preview_bridge writing /home/nuc8/FastUMI/dataset/.preview/latest.jpg at ~2fps from /usb_cam/image_raw/compressed
+
+--- launched 2026-07-07 18:13:01 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+
+--- launched 2026-07-07 18:22:13 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783444934.305243]: preview_bridge: preview from /usb_cam/image_raw/compressed at ~2fps, health-tracking /usb_cam/image_raw/compressed + /camera/odom/sample
+
+--- launched 2026-07-07 18:26:58 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783445219.047862]: preview_bridge: preview from /usb_cam/image_raw/compressed at ~2fps, health-tracking /usb_cam/image_raw/compressed + /camera/odom/sample
+
+--- launched 2026-07-07 18:29:39 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783445380.512281]: preview_bridge: preview from /usb_cam/image_raw/compressed at ~2fps, health-tracking /usb_cam/image_raw/compressed + /camera/odom/sample
+
+--- launched 2026-07-07 19:15:54 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783448155.555216]: preview_bridge: preview from /usb_cam/image_raw/compressed at ~2fps, health-tracking /usb_cam/image_raw/compressed + /camera/odom/sample
+
+--- launched 2026-07-07 19:20:35 ---
+source /home/nuc8/miniconda3/etc/profile.d/conda.sh && conda activate FastUMI && source /opt/ros/noetic/setup.bash && cd /home/nuc8/FastUMI && exec python3 preview_bridge.py
+
+[INFO] [1783448436.506918]: preview_bridge: preview from /usb_cam/image_raw/compressed at ~2fps, health-tracking /usb_cam/image_raw/compressed + /camera/odom/sample

@@ -92,7 +92,7 @@ def main():
                          help='Keep raw video/csv files after successful conversion (default: delete)')
     args = parser.parse_args()
 
-    data_path = os.path.join(config['device_settings']['data_dir'], 'dataset', args.task)
+    data_path = os.path.join(config['device_settings']['data_dir'], args.task)
     failed_log_path = os.path.join(data_path, 'failed_conversions.log')
     raw_root = os.path.join(data_path, 'raw')
 

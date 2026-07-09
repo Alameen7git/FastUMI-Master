@@ -128,7 +128,7 @@ task = args.task
 num_episodes = args.num_episodes
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-data_path = os.path.join(config['device_settings']['data_dir'], 'dataset', task)
+data_path = os.path.join(config['device_settings']['data_dir'], task)
 IMAGE_PATH = os.path.join(data_path, 'camera/')
 CSV_PATH   = os.path.join(data_path, 'csv/')
 for p in (data_path, IMAGE_PATH, CSV_PATH):

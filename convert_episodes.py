@@ -17,7 +17,7 @@ cfg = config['task_config']
 
 
 def convert_one_episode(args):
-    episode_idx, raw_dir, data_path, camera_names, keep_raw = args
+    episode_idx, raw_dir, data_path, camera_names, delete_raw = args
     video_path = os.path.join(raw_dir, 'video.mp4')
     traj_path  = os.path.join(raw_dir, 'trajectory.csv')
     ts_path    = os.path.join(raw_dir, 'timestamps.csv')
@@ -73,7 +73,8 @@ def convert_one_episode(args):
             root.create_dataset('action', data=np.array(qpos))
         os.rename(tmp_path, dataset_path)
 
-        if not keep_raw:
+        # Raw data is preserved by default. Only delete if --delete-raw was passed.
+        if delete_raw:
             shutil.rmtree(raw_dir, ignore_errors=True)
 
         elapsed = time.time() - t0
@@ -88,8 +89,8 @@ def main():
     parser.add_argument('--task', type=str, required=True)
     parser.add_argument('--parallel', type=int, default=2,
                          help='Number of episodes to convert simultaneously (default 2, safe for 32GB RAM)')
-    parser.add_argument('--keep-raw', action='store_true',
-                         help='Keep raw video/csv files after successful conversion (default: delete)')
+    parser.add_argument('--delete-raw', action='store_true',
+                         help='Delete raw video/csv files after successful conversion (default: keep raw data)')
     args = parser.parse_args()
 
     data_path = os.path.join(config['device_settings']['data_dir'], args.task)
@@ -108,13 +109,17 @@ def main():
         print('No raw episodes to convert.')
         sys.exit(0)
 
-    print(f'Found {len(episode_dirs)} raw episode(s). Converting with {args.parallel} worker(s)...\n')
+    print(f'Found {len(episode_dirs)} raw episode(s). Converting with {args.parallel} worker(s)...')
+    if args.delete_raw:
+        print('Raw data will be DELETED after successful conversion (--delete-raw passed).\n')
+    else:
+        print('Raw data will be KEPT after conversion (default). Pass --delete-raw to remove it.\n')
 
     jobs = []
     for d in episode_dirs:
         episode_idx = int(d.split('_')[1])
         raw_dir = os.path.join(raw_root, d)
-        jobs.append((episode_idx, raw_dir, data_path, cfg['camera_names'], args.keep_raw))
+        jobs.append((episode_idx, raw_dir, data_path, cfg['camera_names'], args.delete_raw))
 
     done_count = 0
     failed_count = 0
@@ -140,7 +145,6 @@ def main():
     print(f'\nConversion complete: {done_count} done, {skipped_count} skipped, {failed_count} failed')
     if failed_count > 0:
         print('Failed episodes were not deleted -- check their raw/ folders and redo if needed.')
-    if failed_count > 0:
         print(f'Failed episode details logged to: {failed_log_path}')
 
 

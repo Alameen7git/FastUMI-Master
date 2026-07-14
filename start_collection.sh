@@ -164,6 +164,18 @@ EOF
 
 chmod +x "$TMP"/*.sh
 
+# Record each wrapper script's path so stop_collection.sh can find and close
+# exactly these 4 terminal windows later. $TMP is unique per run (mktemp -d),
+# so this never matches any other terminal — including whichever one
+# stop_collection.sh itself gets run from.
+SESSION_FILE="/tmp/.fastumi_collection_terminals"
+printf '%s\n' \
+    "$TMP/1_roscore.sh" \
+    "$TMP/2_t265.sh" \
+    "$TMP/3_camera.sh" \
+    "$TMP/4_collect.sh" \
+    > "$SESSION_FILE"
+
 # ── Open 4 gnome-terminal windows ─────────────────────────────────────────────
 gnome-terminal --title="FastUMI | 1 roscore"    -- bash "$TMP/1_roscore.sh" &
 sleep 0.3

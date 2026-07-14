@@ -30,31 +30,31 @@
       "urdf_path": "./assets/ur7e_robot.urdf",
       "aruco_dict": "DICT_4X4_50",
       "base_position": {
-          "x": 0.49643,
-          "y": -0.00588,
-          "z": 0.35984
+          "x": 0.30053,
+          "y": -0.46499,
+          "z": 0.08063
       },
       "base_orientation": {
-          "roll": 179.94725,
-          "pitch": -89.999981,
-          "yaw": 0.0
+          "roll": 89.95523,
+          "pitch": 4.63219,
+          "yaw": -1.42517
       },
       "offset": {
           "x": 0.14565,
           "z": 0.1586
       },
       "distances": {
-          "marker_max": 552.0,
-          "marker_min": 116.0,
-          "gripper_max": 255.0,
+          "marker_max": 570.0,
+          "marker_min": 106.0,
+          "gripper_max": 146.0,
           "gripper_min": 0,
-          "flange_to_tcp": 0.172
+          "flange_to_tcp": 0.244
       },
       "start_qpos": [
-          0, 0,
-          0, -1.5707963267948966, 0,
-          -1.5707963267948966, 0, 0,
-          0, 0
+          0, 0, 0,
+          1.635548,-0.955917,2.188992,
+          -4.373795,-1.664870,-3.216816,
+          0
       ]
   }
 }

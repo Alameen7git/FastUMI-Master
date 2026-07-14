@@ -10,7 +10,7 @@ cmd = [
     "-input_format", "mjpeg",
     "-video_size", "1920x1080",
     "-framerate", "30",
-    "-i", "/dev/video4",
+    "-i", "/dev/video0",
     "-f", "rawvideo",
     "-pix_fmt", "bgr24",
     "-"

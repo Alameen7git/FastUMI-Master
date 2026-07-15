@@ -131,7 +131,8 @@ INDEX_HTML = b"""<!doctype html>
            border: 1px solid #444; border-radius: 4px; }
   .main { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   video { max-width: 640px; width: 100%; background: #000; border-radius: 6px; }
-  canvas { background: #262626; border-radius: 6px; cursor: crosshair; max-width: 100%; }
+  canvas { background: #262626; border-radius: 6px; cursor: crosshair; max-width: 100%; display: block; }
+  canvas + canvas { margin-top: 8px; }
   #status { margin-top: 12px; font-size: 13px; color: #f28b82; min-height: 18px; }
   #meta { font-size: 12px; color: #999; margin-top: 6px; }
   .col { display: flex; flex-direction: column; }
@@ -152,7 +153,10 @@ INDEX_HTML = b"""<!doctype html>
       <video id="player" controls></video>
       <div id="meta"></div>
     </div>
-    <canvas id="plot" width="640" height="320"></canvas>
+    <div class="col">
+      <canvas id="plotPos" width="640" height="200"></canvas>
+      <canvas id="plotQuat" width="640" height="200"></canvas>
+    </div>
   </div>
   <div id="status"></div>
 
@@ -160,8 +164,10 @@ INDEX_HTML = b"""<!doctype html>
 const taskSelect = document.getElementById('taskSelect');
 const episodeSelect = document.getElementById('episodeSelect');
 const player = document.getElementById('player');
-const canvas = document.getElementById('plot');
-const ctx = canvas.getContext('2d');
+const plotPos = document.getElementById('plotPos');
+const plotPosCtx = plotPos.getContext('2d');
+const plotQuat = document.getElementById('plotQuat');
+const plotQuatCtx = plotQuat.getContext('2d');
 const statusEl = document.getElementById('status');
 const metaEl = document.getElementById('meta');
 
@@ -228,51 +234,173 @@ async function loadEpisode() {
   }
 }
 
-function drawPlot(cursorFrac) {
-  const W = canvas.width, H = canvas.height, pad = 30;
+const PAD_L = 55, PAD_R = 12, PAD_T = 14;
+
+// Split qpos columns into the position group (meters) and quaternion group
+// (unitless) by label prefix, so each gets its own auto-scaled Y-axis instead
+// of sharing one axis where position (meters) and quaternion (-1..1) drown
+// each other out.
+function splitDims() {
+  const posIdx = [], quatIdx = [];
+  const dims = qpos && qpos.length ? qpos[0].length : 0;
+  for (let d = 0; d < dims; d++) {
+    const label = labels[d] || '';
+    if (label.startsWith('Pos')) posIdx.push(d);
+    else quatIdx.push(d);
+  }
+  return { posIdx, quatIdx };
+}
+
+// Pick a "nice" rounded tick step (1/2/5 * 10^n) so gridline labels read as
+// sensible numbers rather than raw min/max fractions.
+function niceTicks(min, max, count) {
+  if (min === max) { min -= 1; max += 1; }
+  const range = max - min;
+  const rawStep = range / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  let step;
+  if (norm < 1.5) step = 1 * mag;
+  else if (norm < 3) step = 2 * mag;
+  else if (norm < 7) step = 5 * mag;
+  else step = 10 * mag;
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const count2 = Math.round((niceMax - niceMin) / step);
+  const ticks = [];
+  // Compute each tick as niceMin + i*step (not accumulated addition) to avoid
+  // floating-point drift producing labels like "-1.4e-17" instead of "0".
+  for (let i = 0; i <= count2; i++) ticks.push(niceMin + i * step);
+  return ticks;
+}
+
+function formatNum(v) {
+  // Snap floating-point noise (e.g. -1.4e-17 from tick-step arithmetic) to a
+  // clean value before deciding how to display it.
+  v = Math.round(v * 1e6) / 1e6;
+  const av = Math.abs(v);
+  if (av !== 0 && (av < 0.001 || av >= 1000)) return v.toExponential(1);
+  return (Math.round(v * 1000) / 1000).toString();
+}
+
+function drawSubplot(canvas, ctx, dimIndices, unitSuffix, showTimeLabels, cursorFrac) {
+  const W = canvas.width, H = canvas.height;
+  const padB = showTimeLabels ? 28 : 10;
   ctx.clearRect(0, 0, W, H);
-  if (!qpos || qpos.length === 0) return;
+  if (!qpos || qpos.length === 0 || dimIndices.length === 0) return;
 
   const n = qpos.length;
-  const dims = qpos[0].length;
+  const durationSec = fps > 0 ? (n - 1) / fps : 0;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - padB;
 
-  for (let d = 0; d < dims; d++) {
-    const col = qpos.map(row => row[d]);
-    const min = Math.min(...col), max = Math.max(...col);
-    const range = (max - min) || 1;
+  // real min/max of this episode's actual data for these dims -- no fixed range
+  let dataMin = Infinity, dataMax = -Infinity;
+  dimIndices.forEach(d => {
+    for (let i = 0; i < n; i++) {
+      const v = qpos[i][d];
+      if (v < dataMin) dataMin = v;
+      if (v > dataMax) dataMax = v;
+    }
+  });
+  if (!isFinite(dataMin) || !isFinite(dataMax)) return;
 
+  const ticks = niceTicks(dataMin, dataMax, 5);
+  const axisMin = ticks[0], axisMax = ticks[ticks.length - 1];
+  const yRange = (axisMax - axisMin) || 1;
+  const yOf = v => PAD_T + plotH - ((v - axisMin) / yRange) * plotH;
+
+  // horizontal gridlines + numeric Y labels
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ticks.forEach(t => {
+    const y = yOf(t);
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(PAD_L + plotW, y);
+    ctx.stroke();
+    ctx.fillStyle = '#999';
+    ctx.fillText(formatNum(t), PAD_L - 6, y);
+  });
+
+  if (unitSuffix) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#777';
+    ctx.fillText(unitSuffix, 2, 2);
+  }
+
+  // vertical gridlines at fixed time fractions; numeric seconds only on the
+  // bottom subplot so the two stacked charts don't duplicate the same labels
+  const xTickCount = 6;
+  for (let k = 0; k <= xTickCount; k++) {
+    const frac = k / xTickCount;
+    const x = PAD_L + frac * plotW;
+    ctx.strokeStyle = '#2e2e2e';
+    ctx.beginPath();
+    ctx.moveTo(x, PAD_T);
+    ctx.lineTo(x, PAD_T + plotH);
+    ctx.stroke();
+    if (showTimeLabels) {
+      ctx.fillStyle = '#999';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText((frac * durationSec).toFixed(1) + 's', x, PAD_T + plotH + 4);
+    }
+  }
+  if (showTimeLabels) {
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#777';
+    ctx.fillText('time (s)', PAD_L + plotW, H - 2);
+  }
+
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(PAD_L, PAD_T, plotW, plotH);
+
+  // data lines, true-scaled relative to each other within this subplot
+  dimIndices.forEach(d => {
     ctx.strokeStyle = COLORS[d % COLORS.length];
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
-      const x = pad + (n > 1 ? (i / (n - 1)) * (W - 2 * pad) : 0);
-      const norm = (col[i] - min) / range;
-      const y = H - pad - norm * (H - 2 * pad);
+      const x = PAD_L + (n > 1 ? (i / (n - 1)) * plotW : 0);
+      const y = yOf(qpos[i][d]);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
-  }
+  });
 
   // legend
-  const legendLabels = labels && labels.length === dims ? labels : Array.from({length: dims}, (_, i) => 'dim ' + i);
   ctx.font = '11px sans-serif';
-  for (let d = 0; d < dims; d++) {
-    const lx = pad + (d % 4) * 90;
-    const ly = 14 + Math.floor(d / 4) * 14;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  dimIndices.forEach((d, idx) => {
+    const lx = PAD_L + idx * 90;
+    const ly = PAD_T + 10;
     ctx.fillStyle = COLORS[d % COLORS.length];
     ctx.fillRect(lx, ly - 8, 10, 10);
     ctx.fillStyle = '#ccc';
-    ctx.fillText(legendLabels[d], lx + 14, ly);
-  }
+    ctx.fillText(labels[d] || ('dim ' + d), lx + 14, ly);
+  });
 
-  // cursor
-  const cx = pad + cursorFrac * (W - 2 * pad);
+  // playback cursor
+  const cx = PAD_L + cursorFrac * plotW;
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(cx, pad);
-  ctx.lineTo(cx, H - pad);
+  ctx.moveTo(cx, PAD_T);
+  ctx.lineTo(cx, PAD_T + plotH);
   ctx.stroke();
+}
+
+function drawPlot(cursorFrac) {
+  const { posIdx, quatIdx } = splitDims();
+  drawSubplot(plotPos, plotPosCtx, posIdx, 'm', false, cursorFrac);
+  drawSubplot(plotQuat, plotQuatCtx, quatIdx, '', true, cursorFrac);
 }
 
 function currentFrac() {
@@ -296,17 +424,57 @@ player.addEventListener('pause', () => drawPlot(currentFrac()));
 player.addEventListener('loadedmetadata', () => drawPlot(0));
 player.addEventListener('error', () => showError('Video failed to load/encode for this episode.'));
 
-canvas.addEventListener('click', (e) => {
-  if (!player.duration) return;
-  const rect = canvas.getBoundingClientRect();
-  const pad = 30 * (canvas.width / rect.width);
-  const xPix = (e.clientX - rect.left) * (canvas.width / rect.width);
-  const frac = Math.min(1, Math.max(0, (xPix - pad) / (canvas.width - 2 * pad)));
-  player.currentTime = frac * player.duration;
-});
+function attachSeekHandler(canvas) {
+  canvas.addEventListener('click', (e) => {
+    if (!player.duration) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    const padL = PAD_L * scale, padR = PAD_R * scale;
+    const xPix = (e.clientX - rect.left) * scale;
+    const frac = Math.min(1, Math.max(0, (xPix - padL) / (canvas.width - padL - padR)));
+    player.currentTime = frac * player.duration;
+  });
+}
+attachSeekHandler(plotPos);
+attachSeekHandler(plotQuat);
 
 taskSelect.addEventListener('change', populateEpisodes);
 episodeSelect.addEventListener('change', loadEpisode);
+
+// Keyboard shortcuts: Left/Right step through the episode dropdown (via the
+// same loadEpisode() the dropdown's own change handler uses), Space toggles
+// play/pause. Suppressed while an input/select has focus so they don't
+// interfere with normal dropdown selection or text entry.
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+function stepEpisode(delta) {
+  const opts = episodeSelect.options;
+  if (opts.length === 0) return;
+  // Stop at the first/last episode rather than wrapping around, so repeated
+  // presses can't accidentally jump from the last episode back to the first.
+  const idx = Math.min(opts.length - 1, Math.max(0, episodeSelect.selectedIndex + delta));
+  if (idx === episodeSelect.selectedIndex) return;
+  episodeSelect.selectedIndex = idx;
+  loadEpisode();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (isTypingTarget(document.activeElement)) return;
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    stepEpisode(1);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    stepEpisode(-1);
+  } else if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    if (player.paused) player.play(); else player.pause();
+  }
+});
 
 loadDataset();
 </script>

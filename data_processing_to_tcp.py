@@ -14,7 +14,10 @@ config = config["data_process_config"]
 
 # Load predefined ArUco dictionary
 aruco_dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, config["aruco_dict"]))
-parameters = cv2.aruco.DetectorParameters()
+# cv2.aruco.DetectorParameters() segfaults unconditionally in this environment's
+# opencv-contrib-python==4.6.0.66 build (reproduces even on a blank synthetic
+# image); the older factory function is unaffected.
+parameters = cv2.aruco.DetectorParameters_create()
 
 def get_gripper_width(img_list):
     """

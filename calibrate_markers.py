@@ -3,7 +3,9 @@ import cv2
 import numpy as np
 
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-parameters = cv2.aruco.DetectorParameters()
+# cv2.aruco.DetectorParameters() segfaults unconditionally in this environment's
+# opencv-contrib-python==4.6.0.66 build; the older factory function is unaffected.
+parameters = cv2.aruco.DetectorParameters_create()
 
 cmd = [
     "ffmpeg", "-f", "v4l2",

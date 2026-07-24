@@ -30,6 +30,24 @@ import data_processing_to_joint as dpj
 GRIPPER_YAW_FIX_DEG = 0.0  # rotation about gripper local Z-axis; disabled for isolated remap testing
 SCENE_XML = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'mujoco', 'ur7e_scene.xml')
 
+# Robotiq 2F-140 finger_joint: 0 rad = fully open, ~0.7 rad = fully closed
+# (matches the gripper_closed_position=0.695 default in the source URDF's
+# ros2_control macro). The other 5 finger joints mirror this one 1:1 via
+# fixed sign relationships (see FINGER_MIMIC_SIGNS below) -- the real
+# hardware couples them through a four-bar linkage; the URDF/MJCF tree here
+# can't express that closed loop, so we just set all 6 qpos directly instead
+# of relying on physics/equality constraints (this script never steps the
+# simulation, only calls mj_forward for rendering a given pose).
+FINGER_JOINT_CLOSED = 0.7
+FINGER_MIMIC_SIGNS = {
+    'finger_joint': 1.0,
+    'right_outer_knuckle_joint': -1.0,
+    'left_inner_knuckle_joint': -1.0,
+    'right_inner_knuckle_joint': -1.0,
+    'left_inner_finger_joint': 1.0,
+    'right_inner_finger_joint': 1.0,
+}
+
 CAM_W, CAM_H = 480, 270
 SIM_PX = 480
 
@@ -46,6 +64,12 @@ def compute_joint_trajectory(episode_path, config):
     with h5py.File(episode_path, 'r') as f:
         qpos_data = f['action'][:]  # use action (poses), not observations/qpos (leader state)
         images = f['observations/images/front'][:]
+
+    # Gripper openness (0=open, 1=closed) from the same ArUco marker tracking
+    # data_processing_to_joint.py uses -- not stored in the raw episode itself.
+    gripper_open_width = dpj.get_gripper_width(np.array(images))
+    gripper_frac_open = np.clip(gripper_open_width / config['distances']['gripper_max'], 0.0, 1.0)
+    gripper_theta = (1.0 - gripper_frac_open) * FINGER_JOINT_CLOSED  # 0=open .. FINGER_JOINT_CLOSED=closed
 
     N = qpos_data.shape[0]
     raw_t265_pos = np.copy(qpos_data[:, 0:3])  # raw, pre-transform T265 position (local/odom frame)
@@ -80,7 +104,7 @@ def compute_joint_trajectory(episode_path, config):
         init = full  # full is already 6 arm joints
         joint_traj.append(full)
 
-    return np.array(joint_traj), images, raw_t265_pos
+    return np.array(joint_traj), images, raw_t265_pos, gripper_theta
 
 
 def _episode_fps(episode_path, N):
@@ -106,7 +130,7 @@ def render(episode_path, out_path, step, azimuth, elevation, distance):
     import mujoco
 
     config = dpj.config
-    joint_traj, images, raw_t265_pos = compute_joint_trajectory(episode_path, config)
+    joint_traj, images, raw_t265_pos, gripper_theta = compute_joint_trajectory(episode_path, config)
     N = joint_traj.shape[0]
     print(f'{N} frames, solving done.')
 
@@ -119,6 +143,15 @@ def render(episode_path, out_path, step, azimuth, elevation, distance):
 
     tcp_site = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, 'tcp')
     model.site_pos[tcp_site] = [0, 0, config['distances']['flange_to_tcp']]
+
+    gripper_qadr = {
+        name: model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
+        for name in FINGER_MIMIC_SIGNS
+    }
+
+    def set_gripper(data, theta):
+        for name, sign in FINGER_MIMIC_SIGNS.items():
+            data.qpos[gripper_qadr[name]] = sign * theta
 
     # Auto-center on this episode's own TCP centroid -- base_position/
     # base_orientation changes can shift which region of the world the robot
@@ -143,7 +176,8 @@ def render(episode_path, out_path, step, azimuth, elevation, distance):
     print(f'Rendering {len(frame_indices)} composite frames...')
 
     for count, i in enumerate(frame_indices):
-        data.qpos[:] = joint_traj[i]
+        data.qpos[:6] = joint_traj[i]
+        set_gripper(data, gripper_theta[i])
         mujoco.mj_forward(model, data)
         tcp_pos = data.site_xpos[tcp_site].copy()
         renderer.update_scene(data, camera=cam)

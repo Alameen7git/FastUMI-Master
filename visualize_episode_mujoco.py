@@ -88,7 +88,8 @@ def compute_joint_trajectory(episode_path, config):
         normalized_qpos[i, :] = [pos[0], pos[1], pos[2], qx_base, qy_base, qz_base, qw_base]
 
     joint_traj = []
-    init = np.array(config['start_qpos'][2:8])  # fallback only; frame 0 uses seed_joint_angles below
+    init = np.array(config['start_qpos'][3:9])  # fallback only; frame 0 uses seed_joint_angles below
+                                                # ([3:9] = the real 6 joints; see data_processing_to_joint.py)
     for i in range(N):
         pose = normalized_qpos[i]
         direction = np.array(pose[:3])

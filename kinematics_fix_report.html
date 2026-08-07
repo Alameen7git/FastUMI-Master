@@ -1,0 +1,456 @@
+<title>T265→Robot Calibration Fix — Report</title>
+<style>
+  :root {
+    --bg: #F6F3EE;
+    --surface: #FFFFFF;
+    --surface-2: #FBF9F5;
+    --text: #201C18;
+    --text-muted: #6B6154;
+    --accent: #C4622D;
+    --accent-soft: #F1DECB;
+    --good: #2F6F5E;
+    --good-soft: #DEEBE6;
+    --bad: #A93F32;
+    --bad-soft: #F3DED9;
+    --border: #E4DDD1;
+    --code-bg: #EFEAE1;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140F;
+    --surface: #201C16;
+    --surface-2: #241F18;
+    --text: #ECE6DC;
+    --text-muted: #A79C8C;
+    --accent: #E0894A;
+    --accent-soft: #3A2A1A;
+    --good: #6BB79F;
+    --good-soft: #1E332C;
+    --bad: #E08E80;
+    --bad-soft: #3A2420;
+    --border: #362F25;
+    --code-bg: #1C1812;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140F;
+      --surface: #201C16;
+      --surface-2: #241F18;
+      --text: #ECE6DC;
+      --text-muted: #A79C8C;
+      --accent: #E0894A;
+      --accent-soft: #3A2A1A;
+      --good: #6BB79F;
+      --good-soft: #1E332C;
+      --bad: #E08E80;
+      --bad-soft: #3A2420;
+      --border: #362F25;
+      --code-bg: #1C1812;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 64px 24px 120px;
+  }
+
+  header.masthead {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--text);
+  }
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: clamp(28px, 5vw, 40px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .dek {
+    font-size: 17px;
+    color: var(--text-muted);
+    max-width: 62ch;
+    margin: 0 0 18px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .meta-row b { color: var(--text); font-weight: 600; }
+
+  h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 23px;
+    margin: 56px 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  h2 .num {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 15.5px;
+    font-weight: 700;
+    margin: 26px 0 10px;
+    color: var(--text);
+  }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  .section-intro { color: var(--text-muted); max-width: 66ch; }
+
+  a { color: var(--accent); }
+
+  code, .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0 0 16px;
+  }
+  pre code { background: none; padding: 0; font-size: 1em; }
+
+  /* TL;DR box */
+  .tldr {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin: 28px 0 8px;
+  }
+  .tldr h3 {
+    margin: 0 0 12px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .tldr ul { margin: 0; padding-left: 1.2em; }
+  .tldr li { margin-bottom: 8px; }
+  .tldr li:last-child { margin-bottom: 0; }
+
+  /* Status pills */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 2px 9px 3px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .pill.fixed { background: var(--good-soft); color: var(--good); }
+  .pill.open  { background: var(--bad-soft);  color: var(--bad); }
+  .pill.note  { background: var(--accent-soft); color: var(--accent); }
+
+  /* Timeline */
+  .timeline {
+    list-style: none;
+    margin: 20px 0 0;
+    padding: 0;
+    border-left: 2px solid var(--border);
+  }
+  .timeline li {
+    position: relative;
+    padding: 2px 0 22px 24px;
+  }
+  .timeline li::before {
+    content: '';
+    position: absolute;
+    left: -6.5px;
+    top: 6px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+  }
+  .timeline .t-title { font-weight: 700; margin-bottom: 3px; }
+  .timeline .t-body { color: var(--text-muted); font-size: 14.5px; max-width: 64ch; }
+
+  /* Change cards */
+  .change-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin: 16px 0;
+  }
+  .change-card .ch-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .change-card .ch-title { font-weight: 700; font-size: 15.5px; }
+  .change-card .ch-why { color: var(--text-muted); font-size: 14.5px; margin-bottom: 12px; }
+
+  .kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 10px 0 4px;
+  }
+  .kv-table th, .kv-table td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .kv-table th {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .kv-table td.before { color: var(--bad); font-family: ui-monospace, monospace; }
+  .kv-table td.after { color: var(--good); font-family: ui-monospace, monospace; font-weight: 600; }
+  .kv-table tr:last-child td { border-bottom: none; }
+
+  /* data table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 12px 0 20px;
+    overflow-x: auto;
+    display: block;
+  }
+  .data-table thead, .data-table tbody { display: table; width: 100%; table-layout: fixed; }
+  .data-table th, .data-table td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table th {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--surface-2);
+  }
+  .data-table td.num { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .data-table td.good { color: var(--good); font-weight: 600; }
+  .data-table td.bad { color: var(--bad); font-weight: 600; }
+
+  .callout {
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin: 16px 0;
+  }
+  .callout b { color: var(--text); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-family: ui-monospace, monospace;
+  }
+
+  ul.plain { padding-left: 1.15em; margin: 8px 0 14px; }
+  ul.plain li { margin-bottom: 6px; }
+
+  @media (max-width: 560px) {
+    .page { padding: 40px 16px 80px; }
+    .data-table { font-size: 12px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="eyebrow">Engineering Report · FastUMI-Master-ur7e-dev6.0</div>
+    <h1>Fixing the T265→Robot Direction Bug</h1>
+    <p class="dek">Why the arm moved sideways instead of forward, how the true axis mapping and base calibration were derived from real reference data instead of guesswork, and what still needs attention.</p>
+    <div class="meta-row">
+      <span><b>Branch</b> ur7e-dev6.0-testing</span>
+      <span><b>Commit</b> 72c8c51</span>
+      <span><b>Verified on</b> nestest/episode_1.hdf5, Pick_and_place_the_bottle/episode_1.hdf5</span>
+    </div>
+  </header>
+
+  <div class="tldr">
+    <h3>Summary</h3>
+    <ul>
+      <li><span class="pill fixed">Fixed</span> &nbsp;The recorded handheld motion was being interpreted along the wrong robot axes — a T265→robot axis remap (<code>_T265_TO_ROBOT</code>) was fitted from two real motion segments you identified in the video (home→pick, pick→place), instead of guessed.</li>
+      <li><span class="pill fixed">Fixed</span> &nbsp;<code>base_position</code>/<code>base_orientation</code> were re-derived from a real UR pendant reading, correcting for a known 180° convention difference between the pendant's native frame and the robot's URDF frame.</li>
+      <li><span class="pill fixed">Fixed</span> &nbsp;<code>_PREFERRED_BRANCH</code> updated to match the corrected calibration, so the arm reaches with the right elbow/shoulder configuration, not just the right end-point.</li>
+      <li><span class="pill open">Open</span> &nbsp;A kinematic wrist singularity right at the grasp point causes a brief joint-angle jump — a separate, known issue, not fixed here.</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">01</span> The problem</h2>
+  <p class="section-intro">The MuJoCo replay of recorded episodes reproduced motion of roughly the right scale, but the arm moved in the wrong direction — most visibly, a motion you knew should go <em>forward</em> came out as the arm swinging <em>sideways</em>, and the starting pose didn't match the real robot's confirmed home position.</p>
+
+  <h2><span class="num">02</span> How it was isolated</h2>
+  <p class="section-intro">Each stage of the pipeline was checked against independent ground truth before moving to the next, so the bug couldn't hide behind a compounded error.</p>
+  <ul class="timeline">
+    <li>
+      <div class="t-title">FK/URDF chain confirmed correct first</div>
+      <div class="t-body">A static render using the real pendant's joint-angle readout (no episode data, no transform chain) matched a real photo of the robot exactly. This ruled out the URDF, mesh chain, and MuJoCo model as the source of the bug.</div>
+    </li>
+    <li>
+      <div class="t-title">IK / FK solve proven exact</div>
+      <div class="t-body">Replaying a full episode's solved joint angles through forward kinematics reproduced the original Cartesian targets to <b>0.3&nbsp;mm</b> RMS, with the best-fit rotation between target and replay measuring <b>0.03°</b> — i.e. no rotation at all. The analytic IK solver and its <code>_RZ180</code> module-frame correction were not the problem.</div>
+    </li>
+    <li>
+      <div class="t-title">Coordinate-frame audit, line by line</div>
+      <div class="t-body">Every stage from raw T265 pose to the final IK target was traced through the actual code, not the comments. This found that <code>transform_to_base_quat()</code> adds the local T265 displacement directly onto <code>base_position</code> with <b>no rotation applied</b> — meaning a T265-frame direction and a robot-frame direction were being silently treated as the same thing.</div>
+    </li>
+    <li>
+      <div class="t-title">Home pose calibrated against a real pendant reading</div>
+      <div class="t-body">You provided the UR pendant's Tool Position reading at the task's home pose. Applied directly it was off by 1.45&nbsp;m — because the pendant reports position in UR's native <b>Base</b> frame, not the ROS/URDF <code>base_link</code> frame, and the two differ by a fixed 180° yaw. Corrected for that, the reading matched the real joint pose (via FK) to <b>1.7&nbsp;mm / 0.42°</b>.</div>
+    </li>
+    <li>
+      <div class="t-title">Direction confirmed against two real motion segments</div>
+      <div class="t-body">You identified three points in the recorded video by frame number: home (A), bottle pick (B), bottle place (C), and described the real motion as A→B along one screen axis, B→C along the other. Fitting a rotation to match that reduced full-episode IK-unreachable frames from <b>41/207 to 2/207</b>.</div>
+    </li>
+  </ul>
+
+  <h2><span class="num">03</span> What actually changed</h2>
+
+  <div class="change-card">
+    <div class="ch-head">
+      <div class="ch-title">1. <code>base_position</code> / <code>base_orientation</code></div>
+      <span class="pill fixed">fixed</span>
+    </div>
+    <div class="ch-why">Re-derived from a real UR pendant Tool Position reading at the task's home pose, converted from UR's native Base frame into the URDF's <code>base_link</code> frame.</div>
+    <table class="kv-table">
+      <tr><th>Field</th><th>Before</th><th>After</th></tr>
+      <tr><td>base_position</td><td class="before">0.1488, −0.7089, 0.2394</td><td class="after">−0.31962, 0.70865, 0.05448</td></tr>
+      <tr><td>base_orientation (rpy, deg)</td><td class="before">89.955, 4.632, −1.425</td><td class="after">94.961, 5.968, −86.705</td></tr>
+    </table>
+  </div>
+
+  <div class="change-card">
+    <div class="ch-head">
+      <div class="ch-title">2. <code>_T265_TO_ROBOT</code></div>
+      <span class="pill fixed">fixed</span>
+    </div>
+    <div class="ch-why">Was a disabled identity matrix (no-op). Fitted from two real motion vectors you identified in the recorded video, rather than guessed candidates.</div>
+    <table class="kv-table">
+      <tr><th>Field</th><th>Before</th><th>After</th></tr>
+      <tr><td>matrix</td><td class="before">identity (disabled)</td><td class="after">[[0,−1,0],[1,0,0],[0,0,1]] &nbsp;≈ Rz(+90°)</td></tr>
+    </table>
+  </div>
+
+  <div class="change-card">
+    <div class="ch-head">
+      <div class="ch-title">3. <code>_PREFERRED_BRANCH</code></div>
+      <span class="pill fixed">fixed</span>
+    </div>
+    <div class="ch-why">Selects which of 8 valid elbow/shoulder/wrist configurations the IK solver seeds frame 0 with. The old branch was tuned against the old, incorrect calibration.</div>
+    <table class="kv-table">
+      <tr><th>Field</th><th>Before</th><th>After</th></tr>
+      <tr><td>branch</td><td class="before">2 &nbsp;(off by 60–150° per joint)</td><td class="after">5 &nbsp;(within 1–28° per joint)</td></tr>
+    </table>
+  </div>
+
+  <div class="change-card">
+    <div class="ch-head">
+      <div class="ch-title">4. <code>visualize_episode_mujoco.py</code> &nbsp;<span class="mono" style="font-weight:400;color:var(--text-muted);font-size:13px;">(new)</span></div>
+      <span class="pill note">tool</span>
+    </div>
+    <div class="ch-why">Built during this investigation to make calibration changes checkable against real data, instead of eyeballing joint numbers.</div>
+    <ul class="plain">
+      <li>Renders a recorded episode through the full transform + IK chain in MuJoCo, side-by-side with the original camera feed</li>
+      <li>Camera auto-centers on the episode's own TCP centroid — a fixed camera silently frames the wrong spot whenever <code>base_position</code> changes</li>
+      <li>On-screen overlay: frame index, elapsed time (measured from the raw recording's own timestamps, not assumed), raw T265 position, and simulated TCP position — all per frame</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">04</span> Verification</h2>
+  <p class="section-intro">Measured on <code>nestest/episode_1.hdf5</code>, home (frame 0/2), pick (frame 80, t≈3.98s), place (frame 142, t≈7.07s).</p>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>Check</th><th>Before fix</th><th>After fix</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Frame-0 joint match vs. real pendant pose</td><td class="num bad">182.7°&nbsp;combined error</td><td class="num good">0.07°&nbsp;combined error</td></tr>
+      <tr><td>Full-episode unreachable IK frames</td><td class="num bad">41 / 207</td><td class="num good">2 / 207</td></tr>
+      <tr><td>Home → Pick direction</td><td class="num bad">wrong axis</td><td class="num good">matches described "blue axis," moving away from base</td></tr>
+      <tr><td>Pick → Place direction</td><td class="num bad">wrong axis</td><td class="num good">matches described "red axis"</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Note on the reachability metric:</b> reachability/smoothness alone can't prove a calibration is <em>correct</em> — rotating an entire trajectory by an arbitrary fixed matrix often stays just as smooth and reachable. The number above is confirmation the fit holds up end-to-end, not the basis the fit was chosen on; the axis mapping itself was fitted directly to your two identified motion segments.
+  </div>
+
+  <h2><span class="num">05</span> Known remaining issue — not fixed here</h2>
+  <p>Right at the grasp point (episode frames ~73–80), the target pose sits close to a <b>wrist singularity</b>. The Cartesian target barely moves in this region, but the solved joint angles swing between a fully extended pose and a collapsed one — <code>wrist_3</code> was observed wrapping almost a full 360° between two consecutive frames. This is a property of that specific pose relative to the robot's reach geometry, not a calibration error, and needs a different kind of fix (e.g. biasing the IK branch search away from singular configurations, or smoothing across the affected frames).</p>
+
+  <h2><span class="num">06</span> Files changed</h2>
+  <pre><code>config/config.json              base_position, base_orientation
+data_processing_to_joint.py     _T265_TO_ROBOT, _PREFERRED_BRANCH
+visualize_episode_mujoco.py     new file
+assets/mujoco/                  new — MuJoCo scene + meshes used by the tool above
+calibrate_markers.py            unrelated: cv2.aruco segfault workaround
+data_processing_to_tcp.py       unrelated: same segfault workaround</code></pre>
+
+  <footer>
+    Commit 72c8c51 · ur7e-dev6.0-testing · Generated from this session's investigation
+  </footer>
+
+</div>

@@ -1,5 +1,8 @@
 torchvision
 torch
+numpy
+scipy
+tqdm
 pyquaternion
 pyyaml
 rospkg
@@ -12,7 +15,6 @@ packaging
 h5py
 ipython
 opencv-contrib-python
-ikpy
 pyrealsense2
 csvkit
 apriltag

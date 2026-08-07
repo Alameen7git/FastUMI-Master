@@ -2,11 +2,8 @@ import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import os
-import sys
-import types
 import cv2
 from tqdm import tqdm
-from multiprocessing import Pool, cpu_count
 import json
 
 # Load the configuration from the config.json file
@@ -18,7 +15,7 @@ config = config["data_process_config"]
 START_QPOS = config["start_qpos"] # Initial joint positions for the robot (values specific to your robot's configuration)
 PI = np.pi
 
-# --- Analytic UR7e IK (embodied_ai_ml.kinematics) -------------------------
+# --- Analytic UR7e IK (kinematics/, vendored from embodied_ai_ml v1.4.8) ---
 # Replaces ikpy's iterative solver, which had no way to detect or recover
 # from converging to a bad local minimum near joint-limit boundaries --
 # roughly 11/25 episodes had frames off by up to tens of cm as a result.
@@ -27,19 +24,10 @@ PI = np.pi
 # joints, so there is no seed-dependent divergence. Verified to reproduce
 # every recorded target to ~1e-16 m across 5 test episodes (0 failures).
 #
-# The package targets Python >=3.12 and its own __init__.py eagerly imports
-# unrelated heavy deps (lerobot, etc.) not installed in this (3.8) env; the
-# kinematics submodule itself only needs numpy+scipy, so we stub the parent
-# package in sys.modules to import just that submodule without triggering
-# the rest of the package.
-_EMBODIED_AI_ML_SRC = "/home/nuc8/dev/embodied_ai_ml-main/src"
-if _EMBODIED_AI_ML_SRC not in sys.path:
-    sys.path.insert(0, _EMBODIED_AI_ML_SRC)
-if "embodied_ai_ml" not in sys.modules:
-    _stub = types.ModuleType("embodied_ai_ml")
-    _stub.__path__ = [os.path.join(_EMBODIED_AI_ML_SRC, "embodied_ai_ml")]
-    sys.modules["embodied_ai_ml"] = _stub
-from embodied_ai_ml.kinematics import ArmModel, ik_nearest, ik_branch  # noqa: E402
+# Previously imported from an unpacked source tree at a hardcoded absolute
+# path, via a sys.modules stub to dodge the parent package's py3.12/torch
+# imports. Now vendored in-repo (numpy+scipy only) -- see kinematics/__init__.py.
+from kinematics import ArmModel, ik_nearest, ik_branch
 
 _ARM = ArmModel.ur7e()
 # Fixed 180-degree yaw between this module's DH-canonical base frame and our
@@ -80,7 +68,7 @@ def seed_joint_angles(position, quaternion, fallback):
     return q
 
 
-print(f"Analytic UR7e IK ready (embodied_ai_ml.kinematics), reach@0={_ARM.reach_at_zero():.4f}m")
+print(f"Analytic UR7e IK ready (vendored kinematics/), reach@0={_ARM.reach_at_zero():.4f}m")
 
 # T265/UMI local frame vs the robot frame this pipeline's base_position/base_orientation
 # calibration is expressed in -- determined empirically by the user comparing expected
@@ -248,11 +236,15 @@ def normalize_ik_and_save_hdf5(args):
             qpos_data = normalized_qpos
             data = np.array(action_data)
 
-            # START_QPOS carries 2 fixed placeholder entries on each end (legacy
-            # ikpy 10-link chain layout); only the middle 6 are used, and only
-            # as a last-resort fallback -- frame 0's real seed comes from
-            # seed_joint_angles (_PREFERRED_BRANCH) below.
-            initial_joint_angles = np.array(START_QPOS[2:8], dtype=np.float64)
+            # START_QPOS is the legacy ikpy 10-link chain layout: 3 fixed
+            # placeholder entries at the front and 1 at the end, so the real 6
+            # joints are [3:9]. (This was [2:8] -- carried over from slicing
+            # ikpy's 10-element *solution* vector, a different array -- which
+            # prepended a fake 0-rad base joint and dropped the last wrist
+            # joint. [3:9] matches the pendant home reading exactly.)
+            # Used only as a last-resort fallback -- frame 0's real seed comes
+            # from seed_joint_angles (_PREFERRED_BRANCH) below.
+            initial_joint_angles = np.array(START_QPOS[3:9], dtype=np.float64)
             for i in range(len(data)):
                 pose = data[i]
                 direction = np.array(pose[:3])

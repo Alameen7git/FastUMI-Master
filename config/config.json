@@ -30,14 +30,14 @@
       "urdf_path": "./assets/ur7e_robot.urdf",
       "aruco_dict": "DICT_4X4_50",
       "base_position": {
-          "x": 0.49643,
-          "y": -0.00588,
-          "z": 0.35984
+          "x": -0.28487033,
+          "y": 0.72975902,
+          "z": 0.06338738
       },
       "base_orientation": {
-          "roll": 179.94725,
-          "pitch": -89.999981,
-          "yaw": 0.0
+          "roll": 87.39121905,
+          "pitch": 14.45328233,
+          "yaw": -99.77781447
       },
       "offset": {
           "x": 0.14565,
@@ -48,7 +48,7 @@
           "marker_min": 116.0,
           "gripper_max": 255.0,
           "gripper_min": 0,
-          "flange_to_tcp": 0.172
+          "flange_to_tcp": 0.244
       },
       "start_qpos": [
           0, 0,
@@ -56,5 +56,17 @@
           -1.5707963267948966, 0, 0,
           0, 0
       ]
+  },
+  "ur7e_hardware": {
+      "_comment": "Restored after the block was dropped during a config edit. Position/velocity limits are parsed from assets/ur7e_robot.urdf at runtime; joint_accel_limit_rad_s2 is a config placeholder -- verify against the pendant Safety limits before hardware.",
+      "robot_ip": "TODO_FILL_IN_ROBOT_IP",
+      "rest_joints_deg": [93.71, -54.77, 125.42, -250.60, -95.39, -184.31],
+      "_rest_joints_comment": "Physical arm start/rest pose from the UR pendant Move screen (Pick_and_place_the_bottle). validate_joint_trajectory.py re-winds each joint to the nearest revolution to this, so the startup move doesn't wind wrist_1/wrist_3 ~360deg the long way. Update if the home pose changes.",
+      "joint_accel_limit_rad_s2": 0.15,
+      "servo_control_period_s": 0.002,
+      "servo_lookahead_time_s": 0.2,
+      "servo_gain": 100,
+      "startup_move_speed_rad_s": 0.03,
+      "startup_move_accel_rad_s2": 0.05
   }
 }

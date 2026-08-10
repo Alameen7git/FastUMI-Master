@@ -9,6 +9,11 @@ import zarr
 import numpy as np
 import cv2
 import multiprocessing
+import os, sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in [_ROOT] + [os.path.join(_ROOT, _d) for _d in ('conversion','viz','replay_pipeline','replay','lib')]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 from replay_buffer import ReplayBuffer
 from imagecodecs_numcodecs import register_codecs, JpegXl
 register_codecs()

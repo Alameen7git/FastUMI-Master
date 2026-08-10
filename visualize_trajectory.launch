@@ -1,0 +1,11 @@
+<launch>
+  <!-- RViz-only playback: robot_state_publisher + RViz, no connection to the real UR7e -->
+  <arg name="urdf_path" default="/home/nuc8/Downloads/FastUMI-Master/assets/ur7e_robot_rviz.urdf" />
+  <arg name="rviz_config" default="/home/nuc8/Downloads/FastUMI-Master/fastumi.rviz" />
+
+  <param name="robot_description" textfile="$(arg urdf_path)" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen" />
+
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_config)" output="screen" />
+</launch>

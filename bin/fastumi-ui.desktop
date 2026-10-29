@@ -2,8 +2,8 @@
 Type=Application
 Name=FastUMI Control
 Comment=Open the FastUMI data collection UI (closing its window stops everything)
-Exec=gnome-terminal --title="FastUMI Control — close this window to stop" -- /home/nuc8/FastUMI-Master/bin/fastumi-ui start
-Icon=/home/nuc8/FastUMI-Master/webui/static/favicon.svg
+Exec=gnome-terminal --title="FastUMI Control — close this window to stop" -- @REPO@/bin/fastumi-ui start
+Icon=@REPO@/webui/static/favicon.svg
 Terminal=false
 Categories=Science;
 StartupNotify=true

@@ -21,10 +21,26 @@ RUN_DIR = os.path.join(REPO_ROOT, 'webui', '.run')   # pid/state files (gitignor
 # ── Environments ──────────────────────────────────────────────────────────────
 # [CONFIRMED] start_collection.sh, replay_pipeline/make_replay_dataset.sh
 ROS_SETUP   = '/opt/ros/noetic/setup.bash'
-CONDA_SETUP = '/home/nuc8/miniconda3/etc/profile.d/conda.sh'
+
+
+def _conda_base():
+    """The conda install: $FASTUMI_CONDA_BASE, the active conda, or a usual place."""
+    home = os.path.expanduser('~')
+    exe = os.environ.get('CONDA_EXE', '')
+    for base in (os.environ.get('FASTUMI_CONDA_BASE', ''),
+                 os.path.dirname(os.path.dirname(exe)) if exe else '',
+                 os.path.join(home, 'miniconda3'), os.path.join(home, 'anaconda3'),
+                 os.path.join(home, 'miniforge3'), '/opt/conda'):
+        if base and os.path.isfile(os.path.join(base, 'etc', 'profile.d', 'conda.sh')):
+            return base
+    return os.path.join(home, 'miniconda3')
+
+
+CONDA_BASE  = _conda_base()   # /home/nuc8/miniconda3 on the rig
+CONDA_SETUP = os.path.join(CONDA_BASE, 'etc', 'profile.d', 'conda.sh')
 FASTUMI_ENV = 'FastUMI'   # MuJoCo / IK / OpenCV / data_collection.py
 BASE_ENV    = 'base'      # LeRobot (Convert / Push)
-FASTUMI_PY  = '/home/nuc8/miniconda3/envs/FastUMI/bin/python3'   # [CONFIRMED] make_replay_dataset.sh
+FASTUMI_PY  = os.path.join(CONDA_BASE, 'envs', FASTUMI_ENV, 'bin', 'python3')   # [CONFIRMED] make_replay_dataset.sh
 
 # Shell prefixes. Everything runs through `bash -c "<prefix> exec <cmd>"` so
 # the process group we track is the real process, not a wrapper shell.
@@ -157,8 +173,9 @@ PREVIEW_WIDTH = 640
 PREVIEW_FPS = 10
 
 # ── Hugging Face Hub push ─────────────────────────────────────────────────────
-# [CONFIRMED] replay_pipeline/push_dataset_to_hub.py (branch ur7e-dev7.0):
-# --repo-id, --root, --public (default private). Runs in the base env (LeRobot).
-# webui/push_to_hub.py is a same-flags fallback for checkouts without it.
-LEROBOT_PY = '/home/nuc8/miniconda3/bin/python3'   # [CONFIRMED] make_replay_dataset.sh
-PUSH_SCRIPT = _first_existing('replay_pipeline/push_dataset_to_hub.py', 'webui/push_to_hub.py')
+# webui/push_to_hub.py takes the same flags as replay_pipeline/push_dataset_to_hub.py
+# (--repo-id, --root, --public; default private) and also removes files the new
+# copy no longer has, so a push after a delete leaves no old episodes on the Hub.
+# Runs in the base env (LeRobot).
+LEROBOT_PY = os.path.join(CONDA_BASE, 'bin', 'python3')   # [CONFIRMED] make_replay_dataset.sh
+PUSH_SCRIPT = _first_existing('webui/push_to_hub.py', 'replay_pipeline/push_dataset_to_hub.py')

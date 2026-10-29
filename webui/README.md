@@ -19,14 +19,22 @@ own process group, so roslaunch children and the `image_view` preview window go 
 If the server itself crashes, the next `start`/`stop` kills whatever it left running
 (tracked in `webui/.run/pgids.json`).
 
-**Desktop icon**: `bin/fastumi-ui.desktop` is installed as `~/Desktop/fastumi-ui.desktop` (and in
-the app menu via `~/.local/share/applications/`). It opens a terminal running `fastumi-ui start`,
-which opens the browser; closing that terminal window stops everything. On first use, right-click
-the icon → *Allow Launching*. The UI needs no internet (no web fonts or CDN scripts); only
+**Desktop icon**: after cloning, run once:
+
+    ./bin/fastumi-ui install
+
+It puts a **FastUMI Control** icon on the desktop and in the app menu, pointing at wherever this
+checkout lives (`bin/fastumi-ui.desktop` is the template; `@REPO@` is filled in). The icon opens a
+terminal running `fastumi-ui start`, which opens the browser; closing that terminal window stops
+everything. If the icon shows a warning, right-click it → *Allow Launching*. Moved the repo? Run
+`install` again. `./bin/fastumi-ui uninstall` removes the icons. The UI needs no internet (no web fonts or CDN scripts); only
 **Push** to the Hugging Face Hub does.
 
 The server runs in the `FastUMI` conda env (Flask is installed there). Override with
-`FASTUMI_UI_PY=/path/to/python3`, and the port with `FASTUMI_UI_PORT`.
+`FASTUMI_UI_PY=/path/to/python3`, and the port with `FASTUMI_UI_PORT`. Conda is looked for in
+`~/miniconda3`, `~/anaconda3`, `~/miniforge3` and `/opt/conda`; set `FASTUMI_CONDA_BASE` if it is
+elsewhere. The machine also needs ROS Noetic, the `FastUMI` env (Flask, h5py, OpenCV) and LeRobot
+in the conda `base` env (Convert / Push).
 
 ## Operator features
 

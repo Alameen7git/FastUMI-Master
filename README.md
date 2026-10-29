@@ -39,6 +39,7 @@ Physical prototypes of Fast-UMI system
   - [1.4 📺 Intel RealSense Dependencies](#14--intel-realsense-dependencies)
   - [1.5 📷 GoPro Setup](#15--gopro-setup)
 - [2. 📝 Workflow](#2--workflow)
+  - [2.0 💻 Web UI (Desktop Icon)](#20--web-ui-desktop-icon)
   - [2.1 🌏 Start ROS Core](#21--start-ros-core)
   - [2.2 🪢 Connect RealSense T265 and GoPro](#22--connect-realsense-t265-and-gopro)
   - [2.3 🎇 Open RViz for Visualization](#23--open-rviz-for-visualization)
@@ -110,6 +111,22 @@ If your system is missing RealSense dependencies, follow these steps:
 ---
 
 ## 2. 📝 Workflow
+
+### 2.0 💻 Web UI (Desktop Icon)
+The web UI runs the whole pipeline (ROS, T265, GoPro, recording, sync, convert, push to
+Hugging Face, viewer, deleting episodes) from the browser, so steps 2.1–2.4 below are not
+needed when you use it. To get it and create the desktop icon:
+
+    git clone https://github.com/Alameen7git/FastUMI-Master.git
+    cd FastUMI-Master
+    git checkout ur7e-dev7.0
+    ./bin/fastumi-ui install
+
+This puts a **FastUMI Control** icon on the desktop and in the app menu. Double-click it to
+start the UI; it opens in the browser at http://127.0.0.1:5050. Closing the terminal window
+that opens with it stops everything. If the icon shows a warning, right-click it and choose
+**Allow Launching**. `./bin/fastumi-ui uninstall` removes the icon. See
+[webui/README.md](webui/README.md) for details.
 
 ### 2.1 🌏 Start ROS Core
 Start the ROS master node:

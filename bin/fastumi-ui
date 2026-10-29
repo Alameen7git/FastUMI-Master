@@ -5,17 +5,29 @@
 #   ./bin/fastumi-ui start [--no-browser]   run in the foreground, open localhost:5050
 #   ./bin/fastumi-ui stop                   stop the server and every node it started
 #   ./bin/fastumi-ui status
+#   ./bin/fastumi-ui install                put the FastUMI Control icon on the desktop and in the app menu
+#   ./bin/fastumi-ui uninstall              remove those icons
 #
 # `start` blocks. Ctrl+C, `kill`, or closing the terminal all run the same
 # shutdown as the UI's Stop All (collection → GoPro → T265 → ROS, plus
 # sync/convert/dashboard), so no roslaunch process or preview window is left behind.
 #
-# Env overrides: FASTUMI_UI_PY (python with Flask), FASTUMI_UI_PORT.
+# Env overrides: FASTUMI_UI_PY (python with Flask), FASTUMI_CONDA_BASE, FASTUMI_UI_PORT.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-UI_PY="${FASTUMI_UI_PY:-/home/nuc8/miniconda3/envs/FastUMI/bin/python3}"
+
+# The conda install that has the FastUMI env (same search as webui/settings.py).
+conda_base() {
+  local b
+  for b in "${FASTUMI_CONDA_BASE:-}" "${CONDA_EXE:+$(dirname "$(dirname "$CONDA_EXE")")}" \
+           "$HOME/miniconda3" "$HOME/anaconda3" "$HOME/miniforge3" /opt/conda; do
+    [[ -n "$b" && -f "$b/etc/profile.d/conda.sh" ]] && { echo "$b"; return; }
+  done
+  echo "$HOME/miniconda3"
+}
+UI_PY="${FASTUMI_UI_PY:-$(conda_base)/envs/FastUMI/bin/python3}"
 export FASTUMI_UI_PORT="${FASTUMI_UI_PORT:-5050}"
 URL="http://127.0.0.1:$FASTUMI_UI_PORT"
 RUN_DIR="$REPO/webui/.run"
@@ -126,9 +138,39 @@ for k, j in json.load(sys.stdin)["jobs"].items():
   fi
 }
 
+# The icon file in the repo is a template: fill in where this checkout lives.
+DESKTOP_NAME=fastumi-ui.desktop
+desktop_dir() { xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop"; }
+
+cmd_install() {
+  local apps="$HOME/.local/share/applications" desk entry
+  desk="$(desktop_dir)"
+  entry="$(sed "s|@REPO@|$REPO|g" "$HERE/$DESKTOP_NAME")"
+  chmod +x "$HERE/fastumi-ui"
+  mkdir -p "$apps"
+  printf '%s\n' "$entry" > "$apps/$DESKTOP_NAME"
+  say "App menu: $apps/$DESKTOP_NAME"
+  if [[ -d "$desk" ]]; then
+    printf '%s\n' "$entry" > "$desk/$DESKTOP_NAME"
+    chmod +x "$desk/$DESKTOP_NAME"
+    # GNOME only launches desktop icons marked as trusted.
+    gio set "$desk/$DESKTOP_NAME" metadata::trusted true 2>/dev/null
+    say "Desktop:  $desk/$DESKTOP_NAME"
+    say "If the icon shows a warning, right-click it and choose 'Allow Launching'."
+  fi
+  [[ -x "$UI_PY" ]] || say "Note: python not found at $UI_PY (create the FastUMI conda env, or set FASTUMI_UI_PY)."
+}
+
+cmd_uninstall() {
+  rm -f "$HOME/.local/share/applications/$DESKTOP_NAME" "$(desktop_dir)/$DESKTOP_NAME"
+  say "Removed the FastUMI Control icons."
+}
+
 case "${1:-}" in
   start)  shift; cmd_start "$@";;
+  install)   cmd_install;;
+  uninstall) cmd_uninstall;;
   stop)   cmd_stop;;
   status) cmd_status;;
-  *) sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+  *) sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
 esac

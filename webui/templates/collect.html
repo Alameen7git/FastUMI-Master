@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- Machines still on after recording (shown on Sync / Convert / Push) -->
+<div class="machines-on" id="m-on" hidden>
+  <span class="led"></span>
+  <span class="grow"><strong>Machines are still on</strong> (<span id="m-on-list"></span>).
+    Sync, Convert and Push don't need them. Stop them if you are done recording.</span>
+  <button class="stop" type="button" id="m-on-stop">■ Stop machines</button>
+</div>
+
+<!-- ── Record ─────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-collect">
+<div class="instruction" id="c-instr"><span class="arrow">RECORD</span><span class="txt">Connecting…</span></div>
+
+<div class="subtabs" role="tablist">
+  <button type="button" class="subtab active" data-sub="record">Record</button>
+  <button type="button" class="subtab" data-sub="tasks">Tasks</button>
+</div>
+
+<!-- Record: pick a task and go -->
+<div id="sub-record">
+  <div class="panel" id="c-setup">
+    <form id="collect-form" autocomplete="off">
+      <div class="form-grid">
+        <div class="task-pick">
+          <label class="field" id="c-pick-wrap">Task
+            <select id="c-task"></select>
+          </label>
+          <label class="check small"><input type="checkbox" id="c-task-mode"> Type the task name manually</label>
+          <input type="text" id="c-typed" placeholder="Type the task name"
+                 autocomplete="off" aria-label="Task name" hidden>
+          <div class="tnum-wrap" id="c-typed-num-wrap" hidden>
+            <div class="tnum"><span aria-hidden="true">T</span><input type="text" id="c-typed-num" inputmode="decimal"
+                 placeholder="task number, e.g. 7 or 4.1" autocomplete="off" aria-label="Task number"></div>
+            <div class="small muted last-num" id="c-last-num"></div>
+          </div>
+          <div class="inline-reason" id="c-reason"></div>
+        </div>
+        <label class="field">Operator name
+          <input type="text" id="c-operator" placeholder="e.g. N (becomes N1, N2, …)">
+        </label>
+        <label class="field">Episodes to record
+          <input type="number" id="c-episodes" min="1" step="1" value="{{ S.COLLECT_DEFAULT_EPISODES }}">
+        </label>
+      </div>
+      <div id="c-typed-msg"></div>
+      <div id="c-operator-msg"></div>
+      <div class="dataset-name" id="c-dsname" hidden>
+        <div class="k">Saved as</div>
+        <div class="ds-choice" id="c-dsnum"></div>
+        <code id="c-dsname-v"></code>
+        <div class="small muted" id="c-info"></div>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <button class="go huge" id="c-start" type="submit">● Start recording</button>
+      </div>
+      <div id="c-msg"></div>
+    </form>
+  </div>
+
+  <!-- Shown after a session ends -->
+  <div class="panel st-done" id="c-done" hidden>
+    <h2 id="c-done-title">Recording finished</h2>
+    <p class="muted" id="c-done-text"></p>
+    <div class="row">
+      <button class="go big" type="button" id="c-next">Next: Synchronize →</button>
+      <button class="big" type="button" id="c-more">Record more episodes</button>
+      <button class="stop big" type="button" id="c-stopnodes">■ Stop machines</button>
+    </div>
+  </div>
+
+  <div class="panel st-stopped" id="c-live" hidden>
+    <div class="row">
+      <span class="led"></span><h2 class="grow" style="margin:0">Recording session</h2>
+      <span class="state-word" id="c-state">Off</span>
+    </div>
+    <div class="phase-box" id="c-v-phase">—</div>
+    <div class="statusline" id="c-statusline"></div>
+
+    <!-- A machine stopped during the session -->
+    <div class="problem-box" id="c-problem" hidden>
+      <h3 id="c-problem-title">Recording stopped: a machine stopped working</h3>
+      <p id="c-problem-text" class="small"></p>
+      <div class="problem-nodes" id="c-problem-nodes"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="go big" type="button" id="c-continue" disabled>▶ Continue recording</button>
+        <button class="stop big" type="button" id="c-savefinish">Save &amp; finish</button>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">Continue records this episode again once every machine is green.
+        Save &amp; finish keeps all episodes saved so far and ends the session.</p>
+    </div>
+
+    <div class="readouts">
+      <div class="readout"><div class="k">Task</div><div class="v" id="c-v-task" style="font-size:18px;word-break:break-all">—</div></div>
+      <div class="readout"><div class="k">Episode</div><div class="v" id="c-v-ep">—</div></div>
+      <div class="readout"><div class="k">Saved</div><div class="v" id="c-v-saved">—</div></div>
+    </div>
+    <div id="c-alert"></div>
+    <div class="keypad" id="c-keypad">
+      <button class="go" data-key="space" id="k-space" disabled><span id="k-space-label">▶ Start take</span><span class="hint"><kbd>SPACE</kbd></span></button>
+      <button data-key="r" id="k-r" disabled>Redo take<span class="hint"><kbd>R</kbd> throw this take away</span></button>
+      <button class="stop" data-key="e" id="k-e" disabled>■ Finish<span class="hint"><kbd>E</kbd> end the session</span></button>
+    </div>
+    <dialog class="end-dlg" id="c-end-dlg">
+      <form method="dialog">
+        <h3 id="c-end-title">End the session?</h3>
+        <p id="c-end-text"></p>
+        <div class="end-actions">
+          <button class="go big" value="save" id="c-end-save">Save it &amp; end</button>
+          <button class="stop big" value="discard" id="c-end-discard">Don't save it &amp; end</button>
+          <button value="cancel" id="c-end-cancel">Keep recording</button>
+        </div>
+      </form>
+    </dialog>
+    <details class="more">
+      <summary>Keyboard shortcuts</summary>
+      <div class="inner">
+        <p class="small muted" style="margin:0">You can press these keys anywhere on this page (not while typing in a box). They are sent to data_collection.py.</p>
+        <table class="keys">
+          <tr><th>Key</th><th>Action</th></tr>
+          <tr><td><kbd>SPACE</kbd></td><td>Start / stop an episode (stopping saves the take)</td></tr>
+          <tr><td><kbd>R</kbd></td><td>Re-record / redo the current episode (only while recording)</td></tr>
+          <tr><td><kbd>E</kbd></td><td>End the session (during a take it asks whether to save that take)</td></tr>
+          <tr><td><kbd>C</kbd></td><td>After a machine problem: record that episode again</td></tr>
+        </table>
+      </div>
+    </details>
+  </div>
+
+  <details class="panel camera" id="c-cam">
+    <summary><span class="led"></span><span class="grow">Live camera</span><span class="small muted" id="c-cam-state">closed</span></summary>
+    <div class="cam-body">
+      <img id="c-cam-img" alt="Live camera view">
+      <div class="small muted" id="c-cam-msg">Opening…</div>
+      <p class="small muted" style="margin:6px 0 0">The preview uses about half a CPU core while open. Close it before recording if takes feel slow or frames drop.</p>
+    </div>
+  </details>
+</div>
+
+<!-- Tasks: add / edit / remove -->
+<div id="sub-tasks" hidden>
+  <div class="panel">
+    <h2>Add a task</h2>
+    <form id="t-form" autocomplete="off">
+      <div class="task-grid">
+        <div class="field">Task number
+          <div class="tnum"><span aria-hidden="true">T</span><input type="text" id="t-num" inputmode="decimal"
+               placeholder="e.g. 7 or 4.1" autocomplete="off" aria-label="Task number"></div>
+          <div class="small muted last-num" id="t-last-num"></div>
+        </div>
+        <label class="field">Task name
+          <input type="text" id="t-name" placeholder="Type the task name" autocomplete="off">
+        </label>
+        <label class="field span2">Task description (optional)
+          <input type="text" id="t-desc" placeholder="Pick up the red cube and place it in the box">
+        </label>
+      </div>
+      <div id="t-name-msg"></div>
+      <div id="t-exists"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="go big" type="submit" id="t-add">+ Add task</button>
+        <span class="inline-reason" id="t-reason" hidden></span>
+      </div>
+      <div id="t-msg"></div>
+    </form>
+  </div>
+  <div class="panel">
+    <div class="row"><h2 class="grow" style="margin:0">Your tasks</h2><span class="small muted">Saved in {{ S.TASKS_FILE }}</span></div>
+    <p class="small muted" style="margin:6px 0 0">Recordings are saved as <code>UMI_&lt;date&gt;_T&lt;task number&gt;_&lt;operator&gt;&lt;number&gt;</code>, e.g. <code>UMI_2026-09-23_T1_N1</code>. The number counts each operator's datasets for a task that day.</p>
+    <table class="task-table">
+      <thead><tr><th>No.</th><th>Name</th><th>Task description</th><th>Datasets</th><th></th></tr></thead>
+      <tbody id="t-rows"></tbody>
+    </table>
+    <div id="t-list-msg"></div>
+  </div>
+</div>
+</section>
+
+<!-- ── Synchronize ────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-sync">
+<div class="instruction" id="s-instr"><span class="arrow">SYNC</span><span class="txt">Connecting…</span></div>
+<div class="panel">
+  <h2>Synchronize</h2>
+  <p class="muted" style="margin-top:0">Lines up the video frames with the motion tracker so every picture has the right position.</p>
+  <form id="sync-form" autocomplete="off">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset
+        <input type="text" id="s-task" placeholder="Type the dataset name" autocomplete="off">
+      </label>
+    </div>
+    <div id="s-name-msg"></div>
+    <div class="small muted" id="s-info"></div>
+    <div class="row" style="margin-top:18px">
+      <button class="go huge" id="s-start" type="submit">Sync now</button>
+      <button class="stop big" id="s-stop" type="button" disabled>■ Stop</button>
+      <span class="inline-reason" id="s-reason" hidden></span>
+    </div>
+    <div id="s-msg"></div>
+    <details class="more">
+      <summary>Advanced</summary>
+      <div class="inner">
+        <label class="field" style="max-width:220px">Parallel workers
+          <input type="number" id="s-parallel" min="1" value="{{ S.SYNC_DEFAULT_PARALLEL }}">
+        </label>
+        <label class="check"><input type="checkbox" id="s-keep" checked>
+          Keep the raw video files after syncing (untick to delete them and save disk space)</label>
+        <div class="cmd">{{ S.SYNC_SCRIPT or 'convert_episodes.py (not found)' }} --task &lt;name&gt; --parallel N --fps {{ S.DATASET_FPS }} [--keep-raw]</div>
+      </div>
+    </details>
+  </form>
+</div>
+<div class="panel st-stopped" id="s-job">
+  <div class="row"><span class="led"></span><h3 class="grow" style="margin:0">Progress</h3><span class="state-word">Off</span></div>
+  <div class="progress" id="s-bar"><div></div></div>
+  <div class="row">
+    <div class="step-text grow" id="s-step"></div>
+    <button class="small" type="button" data-logbox="s-logbox">Show log ▾</button>
+  </div>
+  <div id="s-logbox" hidden style="margin-top:10px">
+    <div id="s-errors"></div>
+    <div class="tail" id="s-tail"></div>
+  </div>
+  <div class="next-step" id="s-next-box" hidden>
+    <button class="go big" type="button" id="s-next">Next: Convert →</button>
+  </div>
+</div>
+</section>
+
+<!-- ── Convert ────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-convert">
+<div class="instruction" id="v-instr"><span class="arrow">CONVERT</span><span class="txt">Connecting…</span></div>
+<div class="panel">
+  <h2>Convert to LeRobot</h2>
+  <p class="muted" style="margin-top:0">Turns the synced recording into a LeRobot dataset, and can upload it to Hugging Face when it is done.</p>
+  <form id="conv-form" autocomplete="off">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset
+        <input type="text" id="v-task" placeholder="Type the dataset name" autocomplete="off">
+      </label>
+    </div>
+    <div id="v-name-msg"></div>
+    <div class="small muted" id="v-info"></div>
+
+    <div class="push-toggle">
+      <label class="switch"><input type="checkbox" id="v-push"><span class="slider"></span></label>
+      <div class="grow">
+        <div class="switch-label">Push to Hugging Face Hub after converting</div>
+        <div class="small muted" id="v-hf-login">Checking Hugging Face login…</div>
+      </div>
+    </div>
+    <div id="v-push-fields" class="push-fields" hidden>
+      <div class="hub-name">Uploads to <strong id="v-repo">…</strong></div>
+      <label class="check"><input type="checkbox" id="v-public"> Make it public (default: private)</label>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <button class="go huge" id="v-start" type="submit">Convert</button>
+      <button class="stop big" id="v-stop" type="button" disabled>■ Stop</button>
+      <span class="inline-reason" id="v-reason" hidden></span>
+    </div>
+    <div id="v-msg"></div>
+    <details class="more">
+      <summary>Advanced</summary>
+      <div class="inner">
+        <div class="form-grid">
+          <label class="field">Output type
+            <select id="v-space">
+              <option value="pose">Camera + T265 pose (default)</option>
+              {% if S.REPLAY_SCRIPT %}
+              <option value="joint">Robot replay: joint angles</option>
+              <option value="cart-urbase">Robot replay: position, UR base</option>
+              <option value="cart-baselink">Robot replay: position, ROS base</option>
+              <option value="cart-both">Robot replay: both positions (no push)</option>
+              <option value="all">Robot replay: everything (no push)</option>
+              {% endif %}
+            </select>
+          </label>
+          <label class="field">FPS
+            <input type="number" id="v-fps" min="1" placeholder="auto ({{ S.DATASET_FPS }})">
+          </label>
+          <label class="field">Only these episodes (e.g. 1,2,5)
+            <input type="text" id="v-episodes" placeholder="all">
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" id="v-video" checked> Include the camera video (untick for a small pose-only dataset)</label>
+        <div class="cmd">{{ S.CONVERT_SCRIPT }} --src &lt;dataset&gt; --out &lt;dataset&gt;/{{ S.LEROBOT_SUBDIR }} --fps N [--episodes …] [--no-video]<br>
+          State and action: T265 pose x, y, z, qx, qy, qz, qw. Video: {{ S.CONVERT_IMAGE_SIZE[0] }}×{{ S.CONVERT_IMAGE_SIZE[1] }}, H.264.<br>
+          Output: {{ S.DATA_DIR }}&lt;dataset&gt;/{{ S.LEROBOT_SUBDIR }} (the original recordings stay in &lt;dataset&gt;/raw)</div>
+      </div>
+    </details>
+  </form>
+</div>
+<div class="panel st-stopped" id="v-job">
+  <div class="row"><span class="led"></span><h3 class="grow" style="margin:0">Progress</h3><span class="state-word">Off</span></div>
+  <div class="small muted" id="v-stage"></div>
+  <div class="progress" id="v-bar"><div></div></div>
+  <div class="row">
+    <div class="step-text grow" id="v-step"></div>
+    <button class="small" type="button" data-logbox="v-logbox">Show log ▾</button>
+  </div>
+  <div id="v-logbox" hidden style="margin-top:10px">
+    <div id="v-errors"></div>
+    <div class="tail" id="v-tail"></div>
+  </div>
+  <div id="v-pushed"></div>
+  <div class="next-step" id="v-next-box" hidden>
+    <a class="btn go big" href="/visualize" id="v-next">Next: View →</a>
+  </div>
+</div>
+</section>
+
+<!-- ── Push to Hub ────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-push">
+<div class="instruction" id="p-instr"><span class="arrow">PUSH</span><span class="txt">Connecting…</span></div>
+<div class="panel">
+  <h2>Push a dataset to Hugging Face Hub</h2>
+  <p class="muted" style="margin-top:0">Upload a dataset that was converted earlier.</p>
+  <div class="small muted" id="p-hf-login">Checking Hugging Face login…</div>
+  <form id="push-form" autocomplete="off" style="margin-top:14px">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset
+        <input type="text" id="p-dataset" placeholder="Type the dataset name" autocomplete="off">
+      </label>
+    </div>
+    <div id="p-name-msg"></div>
+    <div class="small muted" id="p-info" style="margin-top:8px"></div>
+    <div class="hub-name" id="p-repo-row" hidden>Uploads to <strong id="p-repo">…</strong></div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="p-public"> Make it public (default: private)</label>
+    <div class="row" style="margin-top:18px">
+      <button class="go huge" id="p-start" type="submit">Push to Hub</button>
+      <button class="stop big" id="p-stop" type="button" disabled>■ Stop</button>
+      <span class="inline-reason" id="p-reason" hidden></span>
+    </div>
+    <div id="p-msg"></div>
+  </form>
+</div>
+<div class="panel st-stopped" id="p-job">
+  <div class="row"><span class="led"></span><h3 class="grow" style="margin:0">Progress</h3><span class="state-word">Off</span></div>
+  <div class="progress" id="p-bar"><div></div></div>
+  <div class="row">
+    <div class="step-text grow" id="p-step"></div>
+    <button class="small" type="button" data-logbox="p-logbox">Show log ▾</button>
+  </div>
+  <div id="p-logbox" hidden style="margin-top:10px">
+    <div id="p-errors"></div>
+    <div class="tail" id="p-tail"></div>
+  </div>
+  <div id="p-pushed"></div>
+</div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='collect.js') }}"></script>
+{% endblock %}

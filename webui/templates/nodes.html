@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="instruction" id="instr"><span class="arrow">MACHINES</span><span id="instr-text">Connecting…</span></div>
+
+<div class="panel center">
+  <div class="row" style="justify-content:center">
+    <button class="go huge" id="start-all">▶ Start machines</button>
+    <button class="stop big" id="stop-all">■ Stop all</button>
+    <button class="big" id="restart-all">↻ Restart all</button>
+  </div>
+  <div id="nodes-msg"></div>
+
+  <div class="tiles">
+    {% set nodes = [
+      ('ros', 'ROS', 'Robot system core — starts first', cmds['ros']),
+      ('t265', 'T265', 'Motion tracker', cmds['t265']),
+      ('gopro', 'Camera', 'GoPro video + preview window', cmds['gopro']),
+      ('collection', 'Recorder', 'Runs while you record', 'python3 -u ' ~ S.COLLECT_SCRIPT ~ ' --task <name> --num_episodes <n>'),
+    ] %}
+    {% for key, name, what, cmd in nodes %}
+    <div class="tile st-stopped" data-card="{{ key }}">
+      <span class="led"></span>
+      <div class="name">{{ name }}</div>
+      <div class="state-word">Off</div>
+      <div class="what">{{ what }}</div>
+      <div class="problem"></div>
+      <div class="mini">
+        {% if key == 'collection' %}
+        <a class="btn small primary" href="/collect#collect">Go to Record</a>
+        <button class="small" data-act="stop-collection">Stop</button>
+        {% else %}
+        <button class="small" data-act="start">Start</button>
+        <button class="small" data-act="stop">Stop</button>
+        <button class="small" data-act="restart">Restart</button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <details class="more" style="text-align:left">
+    <summary>Details (commands, process IDs)</summary>
+    <div class="inner" id="details">
+      {% for key, name, what, cmd in nodes %}
+      <div><strong>{{ name }}</strong> <span class="small muted" data-meta="{{ key }}"></span>
+        <div class="cmd">{{ cmd }}</div></div>
+      {% endfor %}
+      <div class="small muted">Commands are set in <code>webui/settings.py</code>. Start order: ROS → T265 → Camera. Stop order: Recorder → Camera → T265 → ROS.</div>
+    </div>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+const msg = document.getElementById('nodes-msg');
+const NAMES = {ros: 'ROS', t265: 'T265', gopro: 'Camera', collection: 'Recorder'};
+function flash(res) {
+  msg.innerHTML = '';
+  if (res && !res.ok) msg.append(el('div', {class: 'notice error', text: res.error}));
+}
+document.getElementById('start-all').onclick = async () => flash(await api('/api/nodes/start_all', {}));
+document.getElementById('stop-all').onclick = async () => flash(await api('/api/nodes/stop_all', {}));
+document.getElementById('restart-all').onclick = async () => flash(await api('/api/nodes/restart_all', {}));
+
+document.querySelectorAll('[data-card]').forEach(card => {
+  const key = card.dataset.card;
+  card.querySelectorAll('button[data-act]').forEach(b => {
+    b.onclick = async () => {
+      if (b.dataset.act === 'stop-collection') return flash(await api('/api/collect/stop', {}));
+      flash(await api(`/api/node/${key}/${b.dataset.act}`, {}));
+    };
+  });
+});
+
+function uptime(t) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - t));
+  return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+}
+
+function instruct(kind, text, link) {
+  const box = document.getElementById('instr');
+  box.className = 'instruction' + (kind ? ' ' + kind : '');
+  const t = document.getElementById('instr-text');
+  t.textContent = text;
+  if (link) t.append(' ', el('a', {class: 'btn primary', href: link.href}, link.label));
+}
+
+document.addEventListener('fui:status', e => {
+  const s = e.detail, j = s.jobs;
+  ['start-all', 'stop-all', 'restart-all'].forEach(id => { document.getElementById(id).disabled = s.sequence_busy; });
+  const nodes = ['ros', 't265', 'gopro'];
+  document.getElementById('start-all').disabled = s.sequence_busy || nodes.every(k => j[k].state === 'running');
+
+  for (const key of [...nodes, 'collection']) {
+    const job = j[key], card = document.querySelector(`[data-card="${key}"]`);
+    setState(card, job.state);
+    card.querySelector('.state-word').textContent = STATE_LABEL[job.state];
+    card.querySelector('.problem').textContent = job.state === 'failed' ? job.reason : '';
+    const btn = a => card.querySelector(`[data-act="${a}"]`);
+    if (btn('start')) btn('start').disabled = job.alive || s.sequence_busy;
+    if (btn('stop')) btn('stop').disabled = !job.alive || s.sequence_busy;
+    if (btn('restart')) btn('restart').disabled = s.sequence_busy;
+    if (btn('stop-collection')) btn('stop-collection').disabled = !job.alive;
+    document.querySelector(`[data-meta="${key}"]`).textContent = job.alive
+      ? `pid ${job.pid} · up ${uptime(job.started_at)}` + (job.reason ? ' · ' + job.reason : '')
+      : (job.exit_code !== null ? `last exit code ${job.exit_code}` : '');
+  }
+
+  const broken = nodes.find(k => j[k].state === 'failed');
+  if (broken) {
+    instruct('bad', `${NAMES[broken]} has a problem: ${j[broken].reason}. Check it, then press RESTART on it.`);
+  } else if (nodes.every(k => j[k].state === 'running')) {
+    instruct('good', 'All machines are ready (3 green lights).', {href: '/collect#collect', label: 'Next: Record →'});
+  } else if (s.sequence_busy || nodes.some(k => j[k].state === 'starting')) {
+    instruct('', 'Starting… wait until all 3 lights are green.');
+  } else {
+    instruct('', 'Press START MACHINES and wait for 3 green lights.');
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="instruction" id="del-instr"><span class="arrow">DELETE</span><span class="txt">Connecting…</span></div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Delete episodes</h2>
+  <p class="muted" style="margin-top:0">Found a bad episode on the View page? Type the dataset and the episode numbers
+    (as shown in the viewer). The raw recording and the synced file are both removed. This cannot be undone.</p>
+  <form id="del-form" autocomplete="off">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset
+        <input type="text" id="del-task" placeholder="Type the dataset name" autocomplete="off">
+      </label>
+    </div>
+    <div id="del-name-msg"></div>
+    <div class="small muted" id="del-have"></div>
+    <div class="form-grid" style="margin-top:12px">
+      <label class="field">Episode numbers
+        <input type="text" id="del-eps" placeholder="e.g. 3, 7, 10-12" autocomplete="off">
+      </label>
+      <label class="field">Reason (optional)
+        <input type="text" id="del-reason" placeholder="e.g. camera froze" autocomplete="off">
+      </label>
+    </div>
+    <div class="small muted" id="del-after"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="stop big" id="del-go" type="submit" disabled>🗑 Delete episodes</button>
+    </div>
+    <div id="del-msg"></div>
+  </form>
+  <details class="more" id="del-log-box" hidden>
+    <summary>Deleted from this dataset (<span id="del-log-n">0</span>)</summary>
+    <div class="inner">
+      <table class="keys"><thead><tr><th>Episode</th><th>Deleted at</th><th>Reason</th></tr></thead><tbody id="del-log"></tbody></table>
+      <div class="small muted">Saved in <code>deleted_episodes.json</code> in the dataset folder, copied into the LeRobot
+        dataset and shown on the Hugging Face dataset page.</div>
+    </div>
+  </details>
+</div>
+
+<div class="panel st-stopped" id="del-job">
+  <div class="row"><span class="led"></span><h3 class="grow" style="margin:0">Progress</h3><span class="state-word">Off</span></div>
+  <div class="small muted" id="del-stage"></div>
+  <div class="progress" id="del-bar"><div></div></div>
+  <div class="row">
+    <div class="step-text grow" id="del-step"></div>
+    <button class="small" type="button" id="del-logbtn">Show log ▾</button>
+  </div>
+  <div id="del-logbox" hidden style="margin-top:10px">
+    <div id="del-errors"></div>
+    <div class="tail" id="del-tail"></div>
+  </div>
+  <div id="del-pushed"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='delete.js') }}"></script>
+{% endblock %}

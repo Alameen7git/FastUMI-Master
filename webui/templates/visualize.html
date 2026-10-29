@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="instruction" id="viz-instr"><span class="arrow">VIEW</span><span class="txt">Connecting…</span></div>
+
+<div class="panel st-stopped" id="viz-panel">
+  <div class="row">
+    <span class="led"></span>
+    <h2 class="grow" style="margin:0">View a dataset</h2>
+    <span class="state-word" id="viz-state">Off</span>
+  </div>
+  <p class="muted" style="margin-top:0">Type the dataset name, then press VIEW to watch the video with the motion data.</p>
+  <form id="viz-form" autocomplete="off">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset name
+        <input type="text" id="viz-task" placeholder="Type the dataset name" autocomplete="off">
+      </label>
+    </div>
+    <div id="viz-name-msg"></div>
+    <div class="small muted" id="viz-info"></div>
+  </form>
+  <div class="row" style="margin-top:18px">
+    <button class="go huge" id="viz-start">▶ View</button>
+    <button class="stop big" id="viz-stop" disabled>■ Close viewer</button>
+    <a class="btn big" id="viz-open" href="#" target="_blank" rel="noopener" hidden>Open in new tab ↗</a>
+    <span class="inline-reason" id="viz-reason" hidden></span>
+  </div>
+  <div id="viz-msg"></div>
+  <details class="more">
+    <summary>Details</summary>
+    <div class="inner">
+      <div class="cmd">{{ S.VIZ_SCRIPT or 'visualize_dataset.py (not found)' }} --port {{ S.VIZ_PORT }} --no-browser</div>
+      <div class="small muted">The viewer plays the synced <code>episode_N.hdf5</code> files made by Sync (not LeRobot folders). Data folder: <code>{{ S.DATA_DIR }}</code></div>
+      <div class="small muted" id="viz-detail"></div>
+    </div>
+  </details>
+</div>
+
+<iframe class="viz-frame" id="viz-frame" hidden title="Dataset viewer"></iframe>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='visualize.js') }}"></script>
+{% endblock %}

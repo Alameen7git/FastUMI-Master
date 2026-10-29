@@ -17,7 +17,7 @@ cfg = config['task_config']
 
 
 def convert_one_episode(args):
-    episode_idx, raw_dir, data_path, camera_names, keep_raw = args
+    episode_idx, raw_dir, data_path, camera_names, keep_raw, fps = args
     video_path = os.path.join(raw_dir, 'video.mp4')
     traj_path  = os.path.join(raw_dir, 'trajectory.csv')
     ts_path    = os.path.join(raw_dir, 'timestamps.csv')
@@ -29,7 +29,13 @@ def convert_one_episode(args):
     t0 = time.time()
     try:
         timestamps = pd.read_csv(ts_path)
-        downsampled = timestamps.iloc[::3].reset_index(drop=True)
+        # Keep every Nth frame so the output is ~fps (the camera records at 60,
+        # so 30 fps = every 2nd frame). The real rate comes from the timestamps.
+        ts = timestamps['Timestamp'].astype(float).values
+        cam_fps = (len(ts) - 1) / (ts[-1] - ts[0]) if len(ts) > 1 and ts[-1] > ts[0] else 60.0
+        stride = max(1, int(round(cam_fps / fps)))
+        out_fps = int(round(cam_fps / stride))
+        downsampled = timestamps.iloc[::stride].reset_index(drop=True)
 
         cap = cv2.VideoCapture(video_path)
         frames = []
@@ -64,6 +70,7 @@ def convert_one_episode(args):
         tmp_path = dataset_path + '.tmp'
         with h5py.File(tmp_path, 'w', rdcc_nbytes=2 * 1024**2) as root:
             root.attrs['sim'] = False
+            root.attrs['fps'] = out_fps
             obs = root.create_group('observations')
             imgs = obs.create_group('images')
             for cam in camera_names:
@@ -77,7 +84,7 @@ def convert_one_episode(args):
             shutil.rmtree(raw_dir, ignore_errors=True)
 
         elapsed = time.time() - t0
-        return (episode_idx, 'done', f'{elapsed:.1f}s, {len(frames)} frames')
+        return (episode_idx, 'done', f'{elapsed:.1f}s, {len(frames)} frames @ {out_fps} fps')
 
     except Exception as e:
         return (episode_idx, 'failed', str(e))
@@ -88,6 +95,8 @@ def main():
     parser.add_argument('--task', type=str, required=True)
     parser.add_argument('--parallel', type=int, default=2,
                          help='Number of episodes to convert simultaneously (default 2, safe for 32GB RAM)')
+    parser.add_argument('--fps', type=int, default=30,
+                         help='Output frame rate (default 30; the camera records at 60)')
     parser.add_argument('--keep-raw', action='store_true',
                          help='Keep raw video/csv files after successful conversion (default: delete)')
     args = parser.parse_args()
@@ -108,13 +117,13 @@ def main():
         print('No raw episodes to convert.')
         sys.exit(0)
 
-    print(f'Found {len(episode_dirs)} raw episode(s). Converting with {args.parallel} worker(s)...\n')
+    print(f'Found {len(episode_dirs)} raw episode(s). Converting with {args.parallel} worker(s) at {args.fps} fps...\n')
 
     jobs = []
     for d in episode_dirs:
         episode_idx = int(d.split('_')[1])
         raw_dir = os.path.join(raw_root, d)
-        jobs.append((episode_idx, raw_dir, data_path, cfg['camera_names'], args.keep_raw))
+        jobs.append((episode_idx, raw_dir, data_path, cfg['camera_names'], args.keep_raw, args.fps))
 
     done_count = 0
     failed_count = 0

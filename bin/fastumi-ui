@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+#
+# fastumi-ui — run the FastUMI operator web UI (webui/app.py).
+#
+#   ./bin/fastumi-ui start [--no-browser]   run in the foreground, open localhost:5050
+#   ./bin/fastumi-ui stop                   stop the server and every node it started
+#   ./bin/fastumi-ui status
+#
+# `start` blocks. Ctrl+C, `kill`, or closing the terminal all run the same
+# shutdown as the UI's Stop All (collection → GoPro → T265 → ROS, plus
+# sync/convert/dashboard), so no roslaunch process or preview window is left behind.
+#
+# Env overrides: FASTUMI_UI_PY (python with Flask), FASTUMI_UI_PORT.
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/.." && pwd)"
+UI_PY="${FASTUMI_UI_PY:-/home/nuc8/miniconda3/envs/FastUMI/bin/python3}"
+export FASTUMI_UI_PORT="${FASTUMI_UI_PORT:-5050}"
+URL="http://127.0.0.1:$FASTUMI_UI_PORT"
+RUN_DIR="$REPO/webui/.run"
+PID_FILE="$RUN_DIR/server.pid"
+# data_collection.py gets up to 60 s to save a take in progress, then the nodes stop.
+SHUTDOWN_WAIT=100
+
+say() { echo "$@" 2>/dev/null || true; }   # terminal may already be gone on SIGHUP
+
+server_pid()   { cat "$PID_FILE" 2>/dev/null; }
+server_alive() { local p; p="$(server_pid)"; [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; }
+
+wait_gone() {  # pid seconds
+  local i
+  for ((i = 0; i < $2 * 5; i++)); do
+    kill -0 "$1" 2>/dev/null || return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+# The single shutdown path: ask the server to run Stop All + exit; fall back
+# to signals, then sweep any process groups it recorded.
+shutdown_server() {  # pid
+  local pid="$1"
+  if ! curl -s -m 3 -X POST "$URL/api/shutdown" >/dev/null 2>&1; then
+    kill -TERM "$pid" 2>/dev/null   # app.py's SIGTERM handler runs the same shutdown
+  fi
+  if ! wait_gone "$pid" "$SHUTDOWN_WAIT"; then
+    say "  server did not exit in ${SHUTDOWN_WAIT}s — killing it"
+    kill -KILL "$pid" 2>/dev/null
+  fi
+  "$UI_PY" "$REPO/webui/app.py" --kill-stale >/dev/null 2>&1
+  rm -f "$PID_FILE"
+}
+
+cmd_start() {
+  local open_browser=1
+  [[ "${1:-}" == "--no-browser" ]] && open_browser=0
+
+  if server_alive; then
+    say "FastUMI UI is already running (pid $(server_pid)) at $URL"
+    [[ $open_browser -eq 1 ]] && (xdg-open "$URL" >/dev/null 2>&1 &)
+    exit 0
+  fi
+  [[ -x "$UI_PY" ]] || { say "ERROR: python not found: $UI_PY (set FASTUMI_UI_PY)"; exit 1; }
+  "$UI_PY" -c 'import flask' 2>/dev/null || { say "ERROR: Flask missing in $UI_PY — pip install flask"; exit 1; }
+
+  cd "$REPO" || exit 1
+  "$UI_PY" "$REPO/webui/app.py" &
+  CHILD=$!
+
+  on_signal() {
+    trap '' INT TERM HUP
+    say ""
+    say "Shutting down FastUMI UI and all nodes it started…"
+    shutdown_server "$CHILD"
+    say "Done."
+    exit 0
+  }
+  trap on_signal INT TERM HUP
+
+  # Wait for the server, then open the browser.
+  local i
+  for ((i = 0; i < 75; i++)); do
+    kill -0 "$CHILD" 2>/dev/null || break
+    if curl -s -m 1 "$URL/api/status" >/dev/null 2>&1; then
+      say "FastUMI UI running at $URL — Ctrl+C here (or ./bin/fastumi-ui stop) to shut everything down."
+      [[ $open_browser -eq 1 ]] && (xdg-open "$URL" >/dev/null 2>&1 &)
+      break
+    fi
+    sleep 0.2
+  done
+
+  # `wait` returns early when a trapped signal arrives; loop until the child is gone.
+  while kill -0 "$CHILD" 2>/dev/null; do
+    wait "$CHILD"
+  done
+  wait "$CHILD" 2>/dev/null
+  local code=$?
+  "$UI_PY" "$REPO/webui/app.py" --kill-stale >/dev/null 2>&1
+  rm -f "$PID_FILE"
+  exit $code
+}
+
+cmd_stop() {
+  if server_alive; then
+    say "Stopping FastUMI UI (pid $(server_pid)) and every node it started…"
+    shutdown_server "$(server_pid)"
+  else
+    say "FastUMI UI is not running; cleaning up anything a previous run left behind."
+    "$UI_PY" "$REPO/webui/app.py" --kill-stale
+    rm -f "$PID_FILE"
+  fi
+  say "Stopped."
+}
+
+cmd_status() {
+  if server_alive; then
+    say "running (pid $(server_pid)) at $URL"
+    curl -s -m 2 "$URL/api/status" | "$UI_PY" -c '
+import json, sys
+for k, j in json.load(sys.stdin)["jobs"].items():
+    print("  {:<11} {:<9} {}".format(j["tag"], j["state"], j["reason"]))' 2>/dev/null
+  else
+    say "not running"
+    exit 1
+  fi
+}
+
+case "${1:-}" in
+  start)  shift; cmd_start "$@";;
+  stop)   cmd_stop;;
+  status) cmd_status;;
+  *) sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+esac

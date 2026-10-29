@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    // Apply the saved theme before first paint (default: light).
+    try { document.documentElement.dataset.theme = localStorage.getItem('fui-theme') || 'light'; }
+    catch (e) { document.documentElement.dataset.theme = 'light'; }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastUMI Control · EGI</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <a class="brand" href="/" aria-label="EGI Embodied General Intelligence — FastUMI Control">
+      <span class="logo" role="img" aria-label="EGI Embodied General Intelligence"></span>
+      <span class="divider" aria-hidden="true"></span>
+      <span class="product"><span class="eyebrow">Data collection</span>FastUMI Control</span>
+    </a>
+    <nav class="steps" id="steps">
+      <a href="/" data-step="machines" class="st-stopped">Machines<span class="led"></span></a>
+      <a href="/collect#collect" data-step="collect" class="st-stopped">Record<span class="led"></span></a>
+      <a href="/collect#sync" data-step="sync" class="st-stopped">Sync<span class="led"></span></a>
+      <a href="/collect#convert" data-step="convert" class="st-stopped">Convert<span class="led"></span></a>
+      <a href="/collect#push" data-step="push" class="st-stopped">Push<span class="led"></span></a>
+      <a href="/visualize" data-step="viz" class="st-stopped">View<span class="led"></span></a>
+      <a href="/delete" data-step="delete" class="st-stopped">Delete<span class="led"></span></a>
+    </nav>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch colour theme">
+      <span class="ti" aria-hidden="true"></span><span class="tl">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<div id="session-banner">
+  <span class="msg">Recording session ended. Record another dataset, or stop the ROS / T265 / GoPro nodes?</span>
+  <span class="small muted" id="session-detail"></span>
+  <span class="grow"></span>
+  <button class="primary" id="session-more">Record more</button>
+  <button class="stop" id="session-stop">Stop nodes</button>
+</div>
+
+<main><div class="wrap">{% block content %}{% endblock %}</div></main>
+
+<button id="log-toggle" type="button" aria-controls="console" aria-expanded="false">LOG<span class="count" id="log-count" hidden>0</span></button>
+<aside id="console" aria-label="Debug log">
+  <div class="bar">
+    <h3>Debug log</h3>
+    <span class="grow"></span>
+    <label><input type="checkbox" id="console-autoscroll" checked> auto-scroll</label>
+    <button class="small" id="console-clear" type="button">Clear</button>
+    <button class="small" id="console-close" type="button">Close ✕</button>
+  </div>
+  <div class="filters" id="console-filters"></div>
+  <div id="console-body"></div>
+</aside>
+
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

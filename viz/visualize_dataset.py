@@ -5,10 +5,15 @@ task/episode, play back the camera video, and see the synced qpos/action
 
 Usage:
     python3 visualize_dataset.py [--port 8000] [--no-browser]
+    python3 visualize_dataset.py --prepare <task>    # encode that task's videos now, then exit
 
 Then open http://localhost:<port> (opened automatically unless --no-browser).
-Episode videos are encoded once (via ffmpeg) and cached under
-<data_dir>/.viz_cache/, so repeat views of the same episode are instant.
+Episode videos are encoded once (via ffmpeg, 960x540 per camera) and cached under
+<data_dir>/.viz_cache/, so repeat views of the same episode are instant. The web
+UI runs --prepare after each Sync so episodes are ready before they are opened.
+Reading the gzip-compressed 1080p frames is the slow part (~54 ms/frame on one
+core), so frames are read in blocks by a pool of worker processes and piped
+straight into ffmpeg.
 """
 import argparse
 import json
@@ -16,13 +21,14 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
+import time
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-import cv2
 import h5py
 import numpy as np
 
@@ -35,7 +41,13 @@ CAM_FPS      = config['task_config'].get('camera', {}).get('fps', 30)
 STRIDE       = config.get('sync', {}).get('frame_stride', 1)
 PLAYBACK_FPS = max(1, CAM_FPS / STRIDE)
 
-QPOS_LABELS = ['Pos X', 'Pos Y', 'Pos Z', 'Q_X', 'Q_Y', 'Q_Z', 'Q_W']
+QPOS_LABELS = ['X', 'Y', 'Z', 'qx', 'qy', 'qz', 'qw']
+
+PREVIEW_HEIGHT = 540    # viewer video height (width follows the aspect ratio)
+READ_BLOCK = 8          # frames per worker read (= the HDF5 chunk depth)
+READ_WORKERS = max(1, min(12, (os.cpu_count() or 2) - 2))
+_pool = None            # worker pool, created in main()
+_encode_lock = threading.Lock()   # one encode at a time: each already uses every core
 
 
 def scan_dataset():
@@ -81,6 +93,14 @@ def load_episode_arrays(task, episode):
     return cam_names, qpos, action, n_frames, hdf5_path
 
 
+def _read_block(args):
+    """Worker: frames [a, b) of every camera, side by side."""
+    path, cams, a, b = args
+    with h5py.File(path, 'r') as f:
+        blocks = [f[f'observations/images/{cam}'][a:b] for cam in cams]
+    return np.concatenate(blocks, axis=2) if len(blocks) > 1 else blocks[0]
+
+
 def render_video(task, episode):
     """Encode (and cache) this episode's camera frames to an H.264 mp4 so the
     browser <video> tag can play/seek it natively."""
@@ -88,32 +108,77 @@ def render_video(task, episode):
     hdf5_path = os.path.join(DATA_DIR, task, f'episode_{episode}.hdf5')
     if not os.path.isfile(hdf5_path):
         raise FileNotFoundError(f'no such episode file: {hdf5_path}')
-    if os.path.isfile(cache_path) and os.path.getmtime(cache_path) >= os.path.getmtime(hdf5_path):
+
+    def fresh():
+        return os.path.isfile(cache_path) and os.path.getmtime(cache_path) >= os.path.getmtime(hdf5_path)
+    if fresh():
         return cache_path
-
-    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    with h5py.File(hdf5_path, 'r') as f:
-        cam_names = list(f['observations/images'].keys())
-        images = [f[f'observations/images/{cam}'][:] for cam in cam_names]
-
-    n_frames = images[0].shape[0]
-    with tempfile.TemporaryDirectory() as tmp:
-        for i in range(n_frames):
-            frame = np.concatenate([img[i] for img in images], axis=1) if len(images) > 1 else images[0][i]
-            cv2.imwrite(os.path.join(tmp, f'{i:06d}.jpg'), frame)
-
-        tmp_out = cache_path + '.tmp.mp4'
+    with _encode_lock:
+        if fresh():   # encoded while this request waited (the browser asks several times)
+            return cache_path
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with h5py.File(hdf5_path, 'r') as f:
+            cams = list(f['observations/images'].keys())
+            n, h, w, _ = f[f'observations/images/{cams[0]}'].shape
+        width = w * len(cams)
+        tmp_out = '{}.{}.tmp.mp4'.format(cache_path, os.getpid())   # --prepare may run at the same time
         cmd = [
             'ffmpeg', '-y', '-loglevel', 'error',
-            '-framerate', str(PLAYBACK_FPS),
-            '-i', os.path.join(tmp, '%06d.jpg'),
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-            tmp_out,
+            '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{width}x{h}', '-r', str(PLAYBACK_FPS), '-i', '-',
+            '-vf', f'scale=-2:{min(PREVIEW_HEIGHT, h)}',
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-f', 'mp4', tmp_out,
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        os.replace(tmp_out, cache_path)
-
+        t0 = time.time()
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        jobs = [(hdf5_path, cams, a, min(n, a + READ_BLOCK)) for a in range(0, n, READ_BLOCK)]
+        try:
+            try:
+                # In order, a window of blocks at a time: memory stays ~2 blocks per worker.
+                window = READ_WORKERS * 2
+                for start in range(0, len(jobs), window):
+                    part = jobs[start:start + window]
+                    for block in (_pool.map(_read_block, part) if _pool else map(_read_block, part)):
+                        proc.stdin.write(np.ascontiguousarray(block).tobytes())
+                proc.stdin.close()
+            except BrokenPipeError:
+                pass
+            err = proc.stderr.read()
+            if proc.wait() != 0:
+                raise subprocess.CalledProcessError(proc.returncode, cmd, output=err)
+            os.replace(tmp_out, cache_path)
+        finally:   # stopped or failed: no half-written file left behind
+            if proc.poll() is None:
+                proc.kill()
+            if os.path.exists(tmp_out):
+                os.remove(tmp_out)
+        print(f'encoded {task}/episode_{episode}: {n} frames in {time.time() - t0:.1f} s', flush=True)
     return cache_path
+
+
+def prepare(task):
+    """Encode every episode of a task that is not cached yet (run after Sync)."""
+    episodes = scan_dataset().get(task, [])
+    if not episodes:
+        print(f'No synced episodes in {task}.')
+        return 0
+    folder = os.path.join(CACHE_DIR, task)
+    if os.path.isdir(folder):   # left by a run that was killed
+        for name in os.listdir(folder):
+            path = os.path.join(folder, name)
+            if name.endswith('.tmp.mp4') and time.time() - os.path.getmtime(path) > 600:
+                os.remove(path)
+    print(f'Preparing {len(episodes)} episode video(s) for {task}', flush=True)
+    failed = 0
+    for i, ep in enumerate(episodes, 1):
+        try:
+            render_video(task, ep)
+            print(f'[{i}/{len(episodes)}] episode_{ep} ready', flush=True)
+        except Exception as e:   # one bad file must not stop the rest
+            failed += 1
+            print(f'[{i}/{len(episodes)}] episode_{ep} FAILED: {e}', flush=True)
+    print(f'Done: {len(episodes) - failed}/{len(episodes)} episode video(s) ready.')
+    return 1 if failed else 0
 
 
 INDEX_HTML = b"""<!doctype html>
@@ -132,6 +197,14 @@ INDEX_HTML = b"""<!doctype html>
   .main { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   video { max-width: 640px; width: 100%; background: #000; border-radius: 6px; }
   canvas { background: #262626; border-radius: 6px; cursor: crosshair; max-width: 100%; }
+  .keys-hint { font-size: 12px; color: #999; }
+  .keys-hint kbd { background: #333; border: 1px solid #555; border-radius: 3px; padding: 0 5px;
+                   font: 11px monospace; color: #e8e8e8; }
+  .vwrap { position: relative; }
+  #toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); pointer-events: none;
+           background: rgba(0,0,0,.72); color: #fff; font-size: 15px; font-weight: 600;
+           padding: 6px 14px; border-radius: 6px; opacity: 0; transition: opacity .25s; }
+  #toast.show { opacity: 1; }
   #status { margin-top: 12px; font-size: 13px; color: #f28b82; min-height: 18px; }
   #meta { font-size: 12px; color: #999; margin-top: 6px; }
   .col { display: flex; flex-direction: column; }
@@ -146,13 +219,15 @@ INDEX_HTML = b"""<!doctype html>
     <label>Episode
       <div><select id="episodeSelect"></select></div>
     </label>
+    <div class="keys-hint"><kbd>Space</kbd> play / pause &nbsp; <kbd>&rarr;</kbd> +10 s &nbsp; <kbd>&larr;</kbd> &minus;5 s
+      &nbsp; <kbd>&darr;</kbd> next episode &nbsp; <kbd>&uarr;</kbd> previous episode</div>
   </div>
   <div class="main">
     <div class="col">
-      <video id="player" controls></video>
+      <div class="vwrap"><video id="player" controls></video><div id="toast"></div></div>
       <div id="meta"></div>
     </div>
-    <canvas id="plot" width="640" height="320"></canvas>
+    <canvas id="plot" width="720" height="500"></canvas>
   </div>
   <div id="status"></div>
 
@@ -193,6 +268,8 @@ async function loadDataset() {
     }
     taskSelect.innerHTML = tasks.map(t => `<option value="${t}">${t}</option>`).join('');
     taskSelect.dataset.episodes = JSON.stringify(data.tasks);
+    const wanted = new URLSearchParams(location.search).get('task');  // e.g. ?task=PnP_block11
+    if (wanted && tasks.includes(wanted)) taskSelect.value = wanted;
     populateEpisodes();
   } catch (e) {
     showError('Failed to load dataset: ' + e.message);
@@ -204,6 +281,15 @@ function populateEpisodes() {
   const eps = allEpisodes[taskSelect.value] || [];
   episodeSelect.innerHTML = eps.map(e => `<option value="${e}">${e}</option>`).join('');
   loadEpisode();
+}
+
+// Encode the next episode in the background while this one is watched
+// (a HEAD request makes the server encode it; the server does one at a time).
+function prefetchNext(task) {
+  const next = episodeSelect.options[episodeSelect.selectedIndex + 1];
+  if (!next) return;
+  const url = `/video/${encodeURIComponent(task)}/episode_${next.value}.mp4`;
+  player.addEventListener('canplay', () => fetch(url, {method: 'HEAD'}).catch(() => {}), {once: true});
 }
 
 async function loadEpisode() {
@@ -221,6 +307,7 @@ async function loadEpisode() {
 
     player.src = `/video/${encodeURIComponent(task)}/episode_${episode}.mp4`;
     player.load();
+    prefetchNext(task);
     drawPlot(0);
   } catch (e) {
     showError('Failed to load episode: ' + e.message);
@@ -228,51 +315,102 @@ async function loadEpisode() {
   }
 }
 
+// T265 pose from the odometry topic: position in metres (odom frame, from where
+// the camera started), orientation as a unit quaternion (no unit).
+const PANELS = [
+  {title: 'Position', unit: 'm', dims: [0, 1, 2], colors: ['#e6194b', '#3cb44b', '#4f8cff']},
+  {title: 'Orientation, quaternion', unit: 'no unit', dims: [3, 4, 5, 6],
+   colors: ['#f58231', '#c77dff', '#46b8b8', '#f032e6']},
+];
+const PAD_L = 64, PAD_R = 16;
+
+function niceStep(range, target) {   // 1, 2 or 5 x 10^k giving about `target` ticks
+  const raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / mag;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * mag;
+}
+function fmt(v, step) {
+  const dec = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  return (Math.abs(v) < step / 1e6 ? 0 : v).toFixed(dec);
+}
+
+function drawPanel(p, top, h, W, n) {
+  const col = d => qpos.map(row => row[d]);
+  let min = Infinity, max = -Infinity;
+  for (const d of p.dims) for (const v of col(d)) { if (v < min) min = v; if (v > max) max = v; }
+  if (max - min < 1e-6) { min -= 0.5; max += 0.5; }
+  const margin = (max - min) * 0.05; min -= margin; max += margin;
+  const y = v => top + h - (v - min) / (max - min) * h;
+  const x = i => PAD_L + (n > 1 ? i / (n - 1) : 0) * (W - PAD_L - PAD_R);
+
+  // grid + y ticks
+  const step = niceStep(max - min, 5);
+  ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+    ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD_L, y(v)); ctx.lineTo(W - PAD_R, y(v)); ctx.stroke();
+    ctx.fillStyle = '#aaa'; ctx.fillText(fmt(v, step), PAD_L - 6, y(v));
+  }
+  // axes
+  ctx.strokeStyle = '#888';
+  ctx.beginPath(); ctx.moveTo(PAD_L, top); ctx.lineTo(PAD_L, top + h); ctx.lineTo(W - PAD_R, top + h); ctx.stroke();
+  // y-axis title
+  ctx.save(); ctx.translate(14, top + h / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ccc'; ctx.font = '12px sans-serif';
+  ctx.fillText(p.unit === 'no unit' ? 'value' : `${p.title.toLowerCase()} (${p.unit})`, 0, 0);
+  ctx.restore();
+
+  // lines
+  p.dims.forEach((d, k) => {
+    const c = col(d);
+    ctx.strokeStyle = p.colors[k]; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) { if (i === 0) ctx.moveTo(x(i), y(c[i])); else ctx.lineTo(x(i), y(c[i])); }
+    ctx.stroke();
+  });
+
+  // title + legend above the panel
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#e8e8e8';
+  const title = `${p.title} (${p.unit})`;
+  ctx.fillText(title, PAD_L, top - 10);
+  let lx = PAD_L + ctx.measureText(title).width + 18;
+  ctx.font = '11px sans-serif';
+  p.dims.forEach((d, k) => {
+    const name = labels && labels[d] ? labels[d] : 'dim ' + d;
+    ctx.fillStyle = p.colors[k]; ctx.fillRect(lx, top - 19, 10, 10);
+    ctx.fillStyle = '#ccc'; ctx.fillText(name, lx + 14, top - 10);
+    lx += ctx.measureText(name).width + 30;
+  });
+}
+
 function drawPlot(cursorFrac) {
-  const W = canvas.width, H = canvas.height, pad = 30;
+  const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   if (!qpos || qpos.length === 0) return;
+  const n = qpos.length, dims = qpos[0].length;
+  const panels = dims === 7 ? PANELS
+    : [{title: 'Values', unit: 'no unit', dims: [...Array(dims).keys()], colors: PANELS[0].colors.concat(PANELS[1].colors)}];
+  const top0 = 30, bottom = H - 44, gap = 44;
+  const h = (bottom - top0 - gap * (panels.length - 1)) / panels.length;
+  panels.forEach((p, k) => drawPanel(p, top0 + k * (h + gap), h, W, n));
 
-  const n = qpos.length;
-  const dims = qpos[0].length;
-
-  for (let d = 0; d < dims; d++) {
-    const col = qpos.map(row => row[d]);
-    const min = Math.min(...col), max = Math.max(...col);
-    const range = (max - min) || 1;
-
-    ctx.strokeStyle = COLORS[d % COLORS.length];
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < n; i++) {
-      const x = pad + (n > 1 ? (i / (n - 1)) * (W - 2 * pad) : 0);
-      const norm = (col[i] - min) / range;
-      const y = H - pad - norm * (H - 2 * pad);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+  // time axis (seconds) under the last panel
+  const dur = n > 1 ? (n - 1) / fps : 0;
+  const xs = t => PAD_L + (dur ? t / dur : 0) * (W - PAD_L - PAD_R);
+  const step = niceStep(dur || 1, 8);
+  ctx.fillStyle = '#aaa'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let t = 0; t <= dur + 1e-9; t += step) {
+    ctx.strokeStyle = '#888'; ctx.beginPath(); ctx.moveTo(xs(t), bottom); ctx.lineTo(xs(t), bottom + 4); ctx.stroke();
+    ctx.fillText(fmt(t, step), xs(t), bottom + 6);
   }
+  ctx.fillStyle = '#ccc'; ctx.font = '12px sans-serif';
+  ctx.fillText('time (s)', PAD_L + (W - PAD_L - PAD_R) / 2, bottom + 24);
 
-  // legend
-  const legendLabels = labels && labels.length === dims ? labels : Array.from({length: dims}, (_, i) => 'dim ' + i);
-  ctx.font = '11px sans-serif';
-  for (let d = 0; d < dims; d++) {
-    const lx = pad + (d % 4) * 90;
-    const ly = 14 + Math.floor(d / 4) * 14;
-    ctx.fillStyle = COLORS[d % COLORS.length];
-    ctx.fillRect(lx, ly - 8, 10, 10);
-    ctx.fillStyle = '#ccc';
-    ctx.fillText(legendLabels[d], lx + 14, ly);
-  }
-
-  // cursor
-  const cx = pad + cursorFrac * (W - 2 * pad);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx, pad);
-  ctx.lineTo(cx, H - pad);
-  ctx.stroke();
+  // cursor (video position) across both panels
+  const cx = PAD_L + cursorFrac * (W - PAD_L - PAD_R);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, top0); ctx.lineTo(cx, bottom); ctx.stroke();
 }
 
 function currentFrac() {
@@ -299,14 +437,68 @@ player.addEventListener('error', () => showError('Video failed to load/encode fo
 canvas.addEventListener('click', (e) => {
   if (!player.duration) return;
   const rect = canvas.getBoundingClientRect();
-  const pad = 30 * (canvas.width / rect.width);
   const xPix = (e.clientX - rect.left) * (canvas.width / rect.width);
-  const frac = Math.min(1, Math.max(0, (xPix - pad) / (canvas.width - 2 * pad)));
+  const frac = Math.min(1, Math.max(0, (xPix - PAD_L) / (canvas.width - PAD_L - PAD_R)));
   player.currentTime = frac * player.duration;
 });
 
 taskSelect.addEventListener('change', populateEpisodes);
 episodeSelect.addEventListener('change', loadEpisode);
+
+// --- hot keys ---
+// Space play/pause, Right +10 s, Left -5 s, Down next episode, Up previous.
+// Also sent by the web UI's View page (postMessage) when this viewer is embedded
+// there, so they work without clicking into the frame first.
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 900);
+}
+function seekBy(sec) {
+  if (!player.duration || !isFinite(player.duration)) return;
+  player.currentTime = Math.min(player.duration, Math.max(0, player.currentTime + sec));
+  toast((sec > 0 ? '+' : '\u2212') + Math.abs(sec) + ' s');
+}
+let resumeAfterSwitch = false;
+function stepEpisode(delta) {
+  const i = episodeSelect.selectedIndex + delta;
+  if (i < 0 || i >= episodeSelect.options.length) {
+    toast(delta > 0 ? 'Last episode' : 'First episode');
+    return;
+  }
+  resumeAfterSwitch = !player.paused && !player.ended;   // keep playing across episodes
+  episodeSelect.selectedIndex = i;
+  toast('Episode ' + episodeSelect.value);
+  loadEpisode();
+}
+player.addEventListener('loadeddata', () => {
+  if (resumeAfterSwitch) { resumeAfterSwitch = false; player.play().catch(() => {}); }
+});
+const HOTKEYS = {
+  ' ': () => { if (player.paused || player.ended) player.play().catch(() => {}); else player.pause(); },
+  'ArrowRight': () => seekBy(10),
+  'ArrowLeft': () => seekBy(-5),
+  'ArrowDown': () => stepEpisode(1),
+  'ArrowUp': () => stepEpisode(-1),
+};
+function hotkey(key) {
+  const fn = HOTKEYS[key];
+  if (fn) fn();
+  return !!fn;
+}
+// Capture phase: runs before the <video> and <select> built-in keys (which would
+// otherwise also seek, or change the episode twice).
+document.addEventListener('keydown', ev => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat && ev.key === ' ') return;
+  if (ev.target.matches && ev.target.matches('input, textarea')) return;
+  if (hotkey(ev.key)) { ev.preventDefault(); ev.stopPropagation(); }
+}, true);
+window.addEventListener('message', ev => {
+  if (ev.data && ev.data.type === 'fastumi-viewer-key') hotkey(ev.data.key);
+});
 
 loadDataset();
 </script>
@@ -453,6 +645,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--no-browser', action='store_true', help='Do not auto-open a browser tab.')
+    parser.add_argument('--prepare', metavar='TASK', help='encode the videos of this task now and exit')
     args = parser.parse_args()
 
     if shutil.which('ffmpeg') is None:
@@ -460,6 +653,17 @@ def main():
         sys.exit(1)
 
     os.makedirs(CACHE_DIR, exist_ok=True)
+    global _pool
+    # HDF5 is not fork-safe once a file has been opened: workers come from a clean
+    # forkserver process. Warm them up now so the first episode does not pay for it.
+    _pool = ProcessPoolExecutor(READ_WORKERS, mp_context=multiprocessing.get_context('forkserver'))
+    list(_pool.map(abs, range(READ_WORKERS)))
+    if args.prepare:
+        try:
+            sys.exit(prepare(args.prepare))
+        except KeyboardInterrupt:   # paused by the web UI (a recording started)
+            print('Stopped.')
+            sys.exit(130)
     server = ThreadingHTTPServer(('0.0.0.0', args.port), Handler)
     url = f'http://localhost:{args.port}'
     print(f'FastUMI dataset viewer running at {url}  (Ctrl+C to stop)')

@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import signal
 import sys
@@ -202,6 +203,7 @@ def reset_node_health():
 # ── Keyboard control ──────────────────────────────────────────────────────────
 # Keys during the "ready" prompt:        Space = start        E = end session
 # Keys during an active recording:       Space = stop & save  R = discard take   E = stop, save, end session
+#                                        X = discard take, end session (web UI "don't save")
 # Keys during a node-failure pause:      C = restart this episode   E = end session
 key_queue    = queue.Queue()
 session_done = threading.Event()
@@ -242,7 +244,7 @@ def keyboard_listener():
                 ch = sys.stdin.read(1)
             except (OSError, IOError):
                 continue
-            if ch in (' ', 'r', 'R', 'e', 'E', 'c', 'C'):
+            if ch in (' ', 'r', 'R', 'e', 'E', 'c', 'C', 'x', 'X'):
                 key_queue.put(ch.lower())
     finally:
         _restore_terminal()  # best-effort immediate restore if this thread does get to exit cleanly
@@ -506,11 +508,22 @@ if __name__ == '__main__':
 
     completed = 0
 
-    # Episode numbering: seeded once from disk at startup (same convention as
-    # before, for compatibility with any existing dataset), then only ever
-    # incremented. Redo can no longer delete a saved file, so there's nothing
-    # that can desync this counter from what's actually on disk.
-    next_episode_number = len([n for n in os.listdir(data_path) if os.path.isfile(os.path.join(data_path, n))])
+    # Episode numbering: seeded once from disk at startup, then only ever
+    # incremented. Episodes are numbered from 1; the next one is one past the
+    # highest raw/episode_N or episode_N.hdf5 already there. (Counting files
+    # in data_path, as before, overwrote raw/episode_1 when recording more
+    # into a dataset that had not been synced yet, and could collide after
+    # an episode was deleted.)
+    existing = [int(m.group(1)) for d in (data_path, os.path.join(data_path, 'raw')) if os.path.isdir(d)
+                for m in (re.match(r'episode_(\d+)(?:\.hdf5)?$', n) for n in os.listdir(d)) if m]
+    # Numbers deleted on the web UI's View page are never reused, so the
+    # deleted_episodes.json log always refers to the take that was removed.
+    try:
+        with open(os.path.join(data_path, 'deleted_episodes.json')) as f:
+            existing += [int(e['episode']) for e in json.load(f).get('deleted', [])]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    next_episode_number = max(existing, default=0) + 1
 
     with open(FRAME_TS_PATH, 'a', newline='') as frame_ts_file:
         frame_ts_writer = csv.writer(frame_ts_file)
@@ -522,8 +535,8 @@ if __name__ == '__main__':
             print('  Space = start   E = end session')
 
             drain_key_queue()  # discard anything left over from the previous phase
-            key = wait_key([' ', 'e'])
-            if key == 'e' or session_done.is_set() or rospy.is_shutdown():
+            key = wait_key([' ', 'e', 'x'])
+            if key in ('e', 'x') or session_done.is_set() or rospy.is_shutdown():
                 print('\nSession ended.')
                 break
 
@@ -534,10 +547,18 @@ if __name__ == '__main__':
             # previous episode's leftover window/flag state hasn't been
             # cleared yet.
             reset_node_health()
+            # start_time is set and both buffers emptied BEFORE is_recording
+            # flips: a callback still in flight when the previous take stopped
+            # can append one frame after its writer thread has finished, and
+            # that stale frame (from seconds earlier) would otherwise become
+            # frame 0 of this take.
+            with buffer_lock:
+                start_time         = rospy.Time.now().to_sec()
+                episode_start_time = start_time
+                first_time_judger  = True
+                video_buffer.clear()
+                trajectory_buffer.clear()
             is_recording       = True
-            start_time         = rospy.Time.now().to_sec()
-            episode_start_time = start_time
-            first_time_judger  = True
             video_path         = VIDEO_PATH_TEMP.replace('_n', f'_{next_episode_number}')
             video_writer       = cv2.VideoWriter(video_path, fourcc, 60, (frame_width, frame_height))
             done_flag          = threading.Event()
@@ -558,7 +579,7 @@ if __name__ == '__main__':
                 vt.start(); tt.start(); st.start(); wt.start()
 
                 drain_key_queue()  # discard anything queued before recording actually began
-                key = wait_key_or_node_failure([' ', 'r', 'e'], node_dead_flag)
+                key = wait_key_or_node_failure([' ', 'r', 'e', 'x'], node_dead_flag)
 
                 # Stop recording — let callbacks know immediately
                 is_recording = False
@@ -577,12 +598,21 @@ if __name__ == '__main__':
                     video_buffer.clear()
                     trajectory_buffer.clear()
                 drain_key_queue()  # discard anything queued while the failure message was printing
-                resume_key = wait_key(['c', 'e'])
-                if resume_key == 'e' or session_done.is_set() or rospy.is_shutdown():
+                resume_key = wait_key(['c', 'e', 'x'])
+                if resume_key in ('e', 'x') or session_done.is_set() or rospy.is_shutdown():
                     print('\nSession ended.')
                     break
                 print()
                 continue  # back to the same episode's "ready" prompt
+
+            if key == 'x':
+                print(f'\n  ✗ Episode {completed + 1} not saved (take discarded). ({completed}/{num_episodes} saved)')
+                with buffer_lock:
+                    video_buffer.clear()
+                    trajectory_buffer.clear()
+                print('\nSession ended.')
+                session_done.set()
+                break
 
             if key == 'r':
                 print('  ↺ Current take discarded.\n')

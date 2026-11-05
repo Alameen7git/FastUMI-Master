@@ -45,6 +45,11 @@ in the conda `base` env (Convert / Push).
   pressing Start with no card plugged in waits for one. This is skipped while recording, and after
   you press Stop. Force a device with `FASTUMI_CAPTURE_DEVICE=/dev/videoN`; other vendors go in
   `CAPTURE_VENDORS` in `settings.py`.
+- **60 fps needs the card on USB 3**: on USB 3 the camera asks the card for uncompressed YUYV
+  (no JPEG decoding, measured 59.95 fps while recording); on USB 2 it falls back to MJPEG, which
+  this card's large JPEG frames limit to ~50 fps. The log line when the camera starts says which
+  (`… USB 3 at /dev/video0, sending YUYV`). Force one with `FASTUMI_PIXEL_FORMAT=yuyv|mjpeg`.
+  Check a recording with `python3 viz/check_fps.py [dataset]`.
 - **GoPro icons in the picture**: the battery / SD-card icons come from the GoPro's HDMI output
   in *Monitor* mode. Set the GoPro's HDMI output to *Live* (clean feed); nothing in software can
   remove them once they are in the picture.

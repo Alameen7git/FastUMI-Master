@@ -428,7 +428,7 @@ NODE_ORDER = ['ros', 't265', 'gopro']           # start order; stop is reversed
 NODE_CMDS = {
     'ros': S.ROS_PREFIX + 'exec ' + S.ROS_CMD,
     't265': S.ROS_PREFIX + 'exec ' + S.T265_CMD,
-    'gopro': S.ROS_PREFIX + 'exec ' + S.GOPRO_CMD,   # {device} filled in by start_gopro()
+    'gopro': S.ROS_PREFIX + 'exec ' + S.GOPRO_CMD,   # {device}, {pixel_format} filled in by start_gopro()
 }
 
 
@@ -496,8 +496,20 @@ def start_gopro():
         hub.add('UI', '[GoPro] not started: ' + why)
         return False, why
     card['used'] = (c['serial'], c['dev'])
-    hub.add('UI', '[GoPro] capture card: ' + card_words(c))
-    return JOBS['gopro'].start(NODE_CMDS['gopro'].format(device=shlex.quote(c['dev'])))
+    fmt = pixel_format(c)
+    hub.add('UI', '[GoPro] capture card: {}, sending {}'.format(card_words(c), fmt.upper()))
+    return JOBS['gopro'].start(NODE_CMDS['gopro'].format(device=shlex.quote(c['dev']), pixel_format=fmt))
+
+
+def pixel_format(c):
+    """YUYV on USB 3 (no JPEG decoding, full 60 fps), MJPEG on USB 2 (see settings)."""
+    if S.PIXEL_FORMAT:
+        return S.PIXEL_FORMAT
+    try:
+        usb3 = int(c['speed']) >= 5000
+    except (TypeError, ValueError):
+        usb3 = False
+    return S.PIXEL_FORMAT_USB3 if usb3 else S.PIXEL_FORMAT_USB2
 
 
 def card_watch():

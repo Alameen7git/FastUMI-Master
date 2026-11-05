@@ -59,8 +59,9 @@ T265_CMD = 'roslaunch realsense2_camera rs_t265.launch'
 # [CONFIRMED] start_collection.sh window [3/4]. The launch file runs usb_cam
 # (Elgato capture of the GoPro HDMI feed) plus an `image_view` node, which is
 # the on-screen preview window that appears as soon as the node starts.
-# {device} is the capture card found when the camera starts (see below).
-GOPRO_CMD = 'roslaunch {} video_device:={{device}}'.format(os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
+# {device} and {pixel_format} come from the capture card found when the camera starts (see below).
+GOPRO_CMD = 'roslaunch {} video_device:={{device}} pixel_format:={{pixel_format}}'.format(
+    os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
 
 # ── Capture card ──────────────────────────────────────────────────────────────
 # Cards of the same model differ in USB product id and serial (two Elgato 4K S
@@ -72,6 +73,15 @@ GOPRO_CMD = 'roslaunch {} video_device:={{device}}'.format(os.path.join(REPO_ROO
 CAPTURE_VENDORS = {'0fd9': 'Elgato'}
 CAPTURE_DEVICE = os.environ.get('FASTUMI_CAPTURE_DEVICE', '')
 CARD_POLL_S = 1.0      # how often to look for the card
+# What the card sends, by USB speed. Measured with the Elgato 4K S on USB 3
+# (2026-11-05): its MJPEG frames are ~890 KB, and usb_cam decodes them on one
+# core at only ~54 fps (recordings came out at 50.6 fps); uncompressed YUYV
+# needs no decoding and holds 59.9 fps at ~50% of one core. YUYV 1080p60 does
+# not fit through USB 2, where the (smaller) MJPEG frames kept up at 60 fps.
+# FASTUMI_PIXEL_FORMAT=mjpeg|yuyv forces one.
+PIXEL_FORMAT_USB3 = 'yuyv'
+PIXEL_FORMAT_USB2 = 'mjpeg'
+PIXEL_FORMAT = os.environ.get('FASTUMI_PIXEL_FORMAT', '')
 CARD_SETTLE_S = 2.0    # wait after a card appears before opening it
 
 

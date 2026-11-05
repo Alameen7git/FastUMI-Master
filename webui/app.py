@@ -102,6 +102,47 @@ def http_check(url):
     return check
 
 
+# ── capture card (Elgato) ─────────────────────────────────────────────────────
+def _read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def find_capture_card():
+    """The capture card to open: {dev, name, serial, product, speed} or None.
+    Looks through /sys for the first video capture node (index 0) of a USB
+    device from S.CAPTURE_VENDORS, so any card model or serial works."""
+    if S.CAPTURE_DEVICE:
+        if not os.path.exists(S.CAPTURE_DEVICE):
+            return None
+        return {'dev': S.CAPTURE_DEVICE, 'name': S.CAPTURE_DEVICE, 'serial': '', 'product': '', 'speed': ''}
+    nodes = glob.glob('/sys/class/video4linux/video*')
+    for node in sorted(nodes, key=lambda n: int(re.sub(r'\D', '', os.path.basename(n)) or 0)):
+        if _read(os.path.join(node, 'index')) != '0':     # index 1 is the metadata node
+            continue
+        usb = os.path.realpath(os.path.join(node, 'device'))
+        while usb != '/' and not os.path.exists(os.path.join(usb, 'idVendor')):
+            usb = os.path.dirname(usb)
+        vendor = _read(os.path.join(usb, 'idVendor'))
+        if vendor not in S.CAPTURE_VENDORS:
+            continue
+        return {'dev': '/dev/' + os.path.basename(node),
+                'name': _read(os.path.join(usb, 'product')) or _read(os.path.join(node, 'name')),
+                'serial': _read(os.path.join(usb, 'serial')),
+                'product': '{}:{}'.format(vendor, _read(os.path.join(usb, 'idProduct'))),
+                'speed': _read(os.path.join(usb, 'speed'))}
+    return None
+
+
+def card_words(c):
+    usb = {'480': 'USB 2', '5000': 'USB 3', '10000': 'USB 3.1', '20000': 'USB 3.2'}.get(c['speed'], '')
+    return '{} {}{}at {}'.format(c['name'], '(serial {}) '.format(c['serial']) if c['serial'] else '',
+                                 usb + ' ' if usb else '', c['dev'])
+
+
 def grace_check(seconds):
     def check(job):
         up = time.time() - (job.started_at or time.time())
@@ -387,7 +428,7 @@ NODE_ORDER = ['ros', 't265', 'gopro']           # start order; stop is reversed
 NODE_CMDS = {
     'ros': S.ROS_PREFIX + 'exec ' + S.ROS_CMD,
     't265': S.ROS_PREFIX + 'exec ' + S.T265_CMD,
-    'gopro': S.ROS_PREFIX + 'exec ' + S.GOPRO_CMD,
+    'gopro': S.ROS_PREFIX + 'exec ' + S.GOPRO_CMD,   # {device} filled in by start_gopro()
 }
 
 
@@ -433,7 +474,60 @@ def start_node(key):
     if why:
         hub.add('UI', '[{}] not started: {}'.format(JOBS[key].tag, why))
         return False, why
+    if key == 'gopro':
+        return start_gopro()
     return JOBS[key].start(NODE_CMDS[key])
+
+
+# The camera follows the capture card: card_watch() restarts it when the card
+# is swapped or re-plugged, and starts it when a card arrives after Start was
+# pressed with none plugged in. Only while the camera is wanted (started and
+# not stopped by the operator), and never while recording.
+card = {'now': None, 'used': None, 'wanted': False}
+
+
+def start_gopro():
+    c = find_capture_card()
+    card['wanted'] = True
+    card['now'] = c
+    if c is None:
+        card['used'] = None
+        why = 'no capture card found: plug in the Elgato card (the camera starts by itself once it is plugged in)'
+        hub.add('UI', '[GoPro] not started: ' + why)
+        return False, why
+    card['used'] = (c['serial'], c['dev'])
+    hub.add('UI', '[GoPro] capture card: ' + card_words(c))
+    return JOBS['gopro'].start(NODE_CMDS['gopro'].format(device=shlex.quote(c['dev'])))
+
+
+def card_watch():
+    last = None
+    changed_at = 0.0
+    while True:
+        c = find_capture_card()
+        card['now'] = c
+        now = (c['serial'], c['dev']) if c else None
+        if now != last:
+            hub.add('UI', '[GoPro] capture card {}'.format(
+                'plugged in: ' + card_words(c) if c else 'unplugged'))
+            last, changed_at = now, time.time()
+        job = JOBS['gopro']
+        if (card['wanted'] and not sequence_lock.locked() and not JOBS['collection'].alive()
+                and now != card['used']):
+            if now is None:
+                if job.alive():
+                    hub.add('UI', '[GoPro] stopping the camera; it starts again when a card is plugged in')
+                    job.stop()
+                card['used'] = None
+            elif time.time() - changed_at >= S.CARD_SETTLE_S and is_green('ros'):
+                hub.add('UI', '[GoPro] {} the camera on the new capture card'.format(
+                    'restarting' if job.alive() else 'starting'))
+                if job.alive():
+                    job.stop()
+                    time.sleep(0.5)
+                if not start_gopro()[0]:
+                    card['used'] = now     # don't retry in a loop; the node shows why it failed
+        time.sleep(S.CARD_POLL_S)
 
 
 def wait_state(key, timeout):
@@ -472,6 +566,7 @@ def stop_nodes(include_collection=True):
     with sequence_lock:
         order = (['collection'] if include_collection else []) + ['preview'] + list(reversed(NODE_ORDER))
         hub.add('UI', '=== Stop: {} ==='.format(' → '.join(JOBS[k].tag for k in order)))
+        card['wanted'] = False
         for key in order:
             if JOBS[key].alive():
                 JOBS[key].stop()
@@ -692,6 +787,8 @@ def api_status():
         'collect_blocked': ('Waiting for {} to be green.'.format(', '.join(deps_missing))
                             if deps_missing else None),
         'sequence_busy': sequence_lock.locked(),
+        'capture_card': {'card': card['now'], 'waiting': card['wanted'] and card['now'] is None
+                         and not JOBS['gopro'].alive()},
         'updates_pending': sorted(pending_updates),
         'last_recorded': None if JOBS['collection'].alive() else last_recorded(),
         'scripts': {'sync': S.SYNC_SCRIPT, 'convert': S.CONVERT_SCRIPT, 'replay': S.REPLAY_SCRIPT,
@@ -916,6 +1013,8 @@ def api_node(key, action):
         good, why = start_node(key)
         return ok() if good else bad(why)
     if action == 'stop':
+        if key == 'gopro':
+            card['wanted'] = False
         background(job.stop)
         return ok()
     if action == 'restart':
@@ -1557,6 +1656,7 @@ def main():
 
     logging.getLogger('werkzeug').setLevel(logging.WARNING)  # hide 1 Hz polling requests
     threading.Thread(target=monitor, daemon=True).start()
+    threading.Thread(target=card_watch, daemon=True).start()
     hub.add('UI', 'FastUMI UI up on http://{}:{}  (repo {}, data_dir {})'.format(
         S.UI_HOST, S.UI_PORT, S.REPO_ROOT, S.DATA_DIR))
     for name, path in (('sync', S.SYNC_SCRIPT), ('convert', S.CONVERT_SCRIPT), ('visualize', S.VIZ_SCRIPT)):

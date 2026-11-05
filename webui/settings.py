@@ -59,7 +59,20 @@ T265_CMD = 'roslaunch realsense2_camera rs_t265.launch'
 # [CONFIRMED] start_collection.sh window [3/4]. The launch file runs usb_cam
 # (Elgato capture of the GoPro HDMI feed) plus an `image_view` node, which is
 # the on-screen preview window that appears as soon as the node starts.
-GOPRO_CMD = 'roslaunch {}'.format(os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
+# {device} is the capture card found when the camera starts (see below).
+GOPRO_CMD = 'roslaunch {} video_device:={{device}}'.format(os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
+
+# ── Capture card ──────────────────────────────────────────────────────────────
+# Cards of the same model differ in USB product id and serial (two Elgato 4K S
+# cards here: 0fd9:00ae and 0fd9:00af), so the UI does not rely on the
+# /dev/elgato udev name: it uses the first capture node (/dev/videoN, index 0)
+# of any card from these USB vendors. While the camera is wanted, a swapped or
+# re-plugged card restarts it on the new card, and a camera started with no
+# card starts once one is plugged in. FASTUMI_CAPTURE_DEVICE=/dev/videoN forces one.
+CAPTURE_VENDORS = {'0fd9': 'Elgato'}
+CAPTURE_DEVICE = os.environ.get('FASTUMI_CAPTURE_DEVICE', '')
+CARD_POLL_S = 1.0      # how often to look for the card
+CARD_SETTLE_S = 2.0    # wait after a card appears before opening it
 
 
 def _load_config():

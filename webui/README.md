@@ -38,6 +38,13 @@ in the conda `base` env (Convert / Push).
 
 ## Operator features
 
+- **Swapping the capture card**: the camera does not depend on `/dev/elgato` (that udev name
+  only matched one card model). When the camera starts, the UI uses whichever Elgato card is plugged
+  in, any model or serial, and shows it under the Camera light. While the camera is on, unplugging
+  the card stops it, and plugging a card in (the same one or another) starts it again by itself;
+  pressing Start with no card plugged in waits for one. This is skipped while recording, and after
+  you press Stop. Force a device with `FASTUMI_CAPTURE_DEVICE=/dev/videoN`; other vendors go in
+  `CAPTURE_VENDORS` in `settings.py`.
 - **GoPro icons in the picture**: the battery / SD-card icons come from the GoPro's HDMI output
   in *Monitor* mode. Set the GoPro's HDMI output to *Live* (clean feed); nothing in software can
   remove them once they are in the picture.

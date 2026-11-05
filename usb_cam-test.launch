@@ -1,6 +1,8 @@
 <launch>
+  <!-- The web UI passes the capture card it found: video_device:=/dev/videoN -->
+  <arg name="video_device" default="/dev/elgato" />
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
-    <param name="video_device" value="/dev/elgato" />
+    <param name="video_device" value="$(arg video_device)" />
     <param name="image_width" value="1920" />
     <param name="image_height" value="1080" />
     <param name="pixel_format" value="mjpeg" />

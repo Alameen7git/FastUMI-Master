@@ -125,7 +125,8 @@ Output is LeRobot v3.0, 20 fps, `action` = 6 UR7e joints (rad) + gripper (1 = op
 
 - `config/config.json`: `base_position` / `base_orientation` refitted so the T265 start maps onto
   the pendant home pose `[63.31, −110.96, 115.32, −97.77, −92.77, −206.36]°` (single-point fit).
-- `conversion/data_processing_to_joint.py`: finds `embodied_ai_ml` in either install location;
+- `conversion/data_processing_to_joint.py`: analytic IK from the bundled `kinematics/` (from
+  `ur7e-dev6.1`, identical to embodied_ai_ml v1.4.8; external checkout only as fallback);
   ArUco `DetectorParameters` works on both old and new OpenCV.
 - Live T265 home check in the web UI; YUYV camera format (true 60 fps → 20 fps synced).
 

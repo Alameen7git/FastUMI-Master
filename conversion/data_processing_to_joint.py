@@ -28,22 +28,28 @@ PI = np.pi
 # joints, so there is no seed-dependent divergence. Verified to reproduce
 # every recorded target to ~1e-16 m across 5 test episodes (0 failures).
 #
-# The package targets Python >=3.12 and its own __init__.py eagerly imports
-# unrelated heavy deps (lerobot, etc.) not installed in this (3.8) env; the
-# kinematics submodule itself only needs numpy+scipy, so we stub the parent
-# package in sys.modules to import just that submodule without triggering
-# the rest of the package.
-# The checkout lives in different places on different machines: use the first that exists.
-_EMBODIED_AI_ML_SRC = next((p for p in ("/home/nuc8/embodied_ai_ml-main/src",
-                                        "/home/nuc8/dev/embodied_ai_ml-main/src")
-                            if os.path.isdir(p)), "/home/nuc8/embodied_ai_ml-main/src")
-if _EMBODIED_AI_ML_SRC not in sys.path:
-    sys.path.insert(0, _EMBODIED_AI_ML_SRC)
-if "embodied_ai_ml" not in sys.modules:
-    _stub = types.ModuleType("embodied_ai_ml")
-    _stub.__path__ = [os.path.join(_EMBODIED_AI_ML_SRC, "embodied_ai_ml")]
-    sys.modules["embodied_ai_ml"] = _stub
-from embodied_ai_ml.kinematics import ArmModel, ik_nearest, ik_branch  # noqa: E402
+# The five modules it needs are vendored in kinematics/ at the repo root (byte-for-byte
+# embodied_ai_ml v1.4.8, numpy + scipy only; brought over from ur7e-dev6.1), so a clone
+# works anywhere. Fallback: an external embodied_ai_ml checkout, whose package __init__
+# targets Python >=3.12 and imports heavy deps -- hence the sys.modules stub.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+try:
+    from kinematics import ArmModel, ik_nearest, ik_branch  # noqa: E402
+    _IK_SOURCE = "kinematics/ (vendored)"
+except ImportError:
+    _EMBODIED_AI_ML_SRC = next((p for p in ("/home/nuc8/embodied_ai_ml-main/src",
+                                            "/home/nuc8/dev/embodied_ai_ml-main/src")
+                                if os.path.isdir(p)), "/home/nuc8/embodied_ai_ml-main/src")
+    if _EMBODIED_AI_ML_SRC not in sys.path:
+        sys.path.insert(0, _EMBODIED_AI_ML_SRC)
+    if "embodied_ai_ml" not in sys.modules:
+        _stub = types.ModuleType("embodied_ai_ml")
+        _stub.__path__ = [os.path.join(_EMBODIED_AI_ML_SRC, "embodied_ai_ml")]
+        sys.modules["embodied_ai_ml"] = _stub
+    from embodied_ai_ml.kinematics import ArmModel, ik_nearest, ik_branch  # noqa: E402
+    _IK_SOURCE = _EMBODIED_AI_ML_SRC
 
 _ARM = ArmModel.ur7e()
 # Fixed 180-degree yaw between this module's DH-canonical base frame and our
@@ -85,7 +91,7 @@ def seed_joint_angles(position, quaternion, fallback):
     return q
 
 
-print(f"Analytic UR7e IK ready (embodied_ai_ml.kinematics), reach@0={_ARM.reach_at_zero():.4f}m")
+print(f"Analytic UR7e IK ready ({_IK_SOURCE}), reach@0={_ARM.reach_at_zero():.4f}m")
 
 # T265/UMI local frame vs the robot frame this pipeline's base_position/base_orientation
 # calibration is expressed in -- determined empirically by the user comparing expected

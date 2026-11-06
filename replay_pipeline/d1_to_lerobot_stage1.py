@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 STAGE 1 of the FastUMI-raw -> LeRobot(D2-schema) converter.  RUN WITH THE
-FastUMI CONDA ENV (needs embodied_ai_ml analytic IK + cv2 ArUco):
+FastUMI CONDA ENV (analytic IK from kinematics/ + cv2 ArUco):
 
     /home/nuc8/miniconda3/envs/FastUMI/bin/python3 d1_to_lerobot_stage1.py \
         --task Pick_and_place_the_bottle --out-dir outputs/d1_lerobot_intermediate

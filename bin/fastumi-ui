@@ -38,7 +38,12 @@ SHUTDOWN_WAIT=100
 say() { echo "$@" 2>/dev/null || true; }   # terminal may already be gone on SIGHUP
 
 server_pid()   { cat "$PID_FILE" 2>/dev/null; }
-server_alive() { local p; p="$(server_pid)"; [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; }
+# Alive only if that pid is really webui/app.py: after a reboot the old pid in
+# server.pid can belong to another program, and the icon then did nothing.
+server_alive() {
+  local p; p="$(server_pid)"
+  [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'webui/app.py'
+}
 
 wait_gone() {  # pid seconds
   local i

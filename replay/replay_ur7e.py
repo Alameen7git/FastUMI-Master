@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import xml.etree.ElementTree as ET
 
 import h5py
@@ -106,7 +107,7 @@ def dry_run_report(episode_path, q, qd, qdd, control_period, orig_duration, scal
 
     print(f"--- dry run: {os.path.basename(episode_path)} ---")
     print(f"  recorded duration: {orig_duration:.2f}s  ->  safety-retimed duration: {q.shape[0] * control_period:.2f}s "
-          f"(retime x{scale:.2f}, includes {RETIME_SAFETY_MARGIN:.0%} margin)")
+          f"(retime x{scale:.2f}, includes {RETIME_SAFETY_MARGIN - 1:.0%} margin)")
     print(f"  speed scale: x{speed_scale:.2f}  ->  EFFECTIVE playback duration: {effective_duration:.2f}s "
           f"({effective_control_period * 1000:.1f} ms/waypoint, {q.shape[0]} waypoints)")
     print(f"  effective peak |velocity|: {np.degrees(max_vel_eff):.1f} deg/s   (URDF limit: {np.degrees(vel_limit.min()):.0f} deg/s)")
@@ -157,6 +158,7 @@ def execute_on_hardware(q, robot_ip, effective_control_period, lookahead_time, g
         print(f"Could not establish an RTDE control connection to {robot_ip}.")
         sys.exit(1)
 
+    approaching = False
     try:
         current_q = np.array(rtde_r.getActualQ())
         first_move_dist_deg = np.degrees(np.abs(q[0] - current_q)).max()
@@ -169,7 +171,27 @@ def execute_on_hardware(q, robot_ip, effective_control_period, lookahead_time, g
         print(f"Moving to trajectory start (deg): {np.degrees(q[0]).round(1).tolist()} "
               f"(max joint delta {first_move_dist_deg:.1f} deg) at speed={startup_speed_scaled:.3f} rad/s "
               f"(x{speed_scale:.2f} of {startup_speed} rad/s), accel={startup_accel_scaled:.3f} rad/s^2 ...")
-        rtde_c.moveJ(q[0].tolist(), startup_speed_scaled, startup_accel_scaled)
+        # Asynchronous, so Ctrl+C (or the web UI's Stop) can stop this slow move
+        # part-way: a blocking moveJ only returns once the arm has arrived.
+        approaching = True
+        rtde_c.moveJ(q[0].tolist(), startup_speed_scaled, startup_accel_scaled, True)
+        # Don't trust the async progress alone (it can read "done" before the
+        # move has started): wait until the arm is actually at the start, since
+        # servoJ from anywhere else would jump.
+        deadline = time.time() + 1.5 * (np.radians(first_move_dist_deg) / startup_speed_scaled
+                                         + startup_speed_scaled / startup_accel_scaled) + 10
+        while True:
+            left_deg = np.degrees(np.abs(q[0] - np.array(rtde_r.getActualQ()))).max()
+            if left_deg < 0.5 and rtde_c.getAsyncOperationProgress() < 0:
+                break
+            if time.time() > deadline:
+                print(f"ABORT: the arm did not reach the trajectory start ({left_deg:.1f} deg away). "
+                      "Check the pendant for a protective stop.")
+                rtde_c.stopJ()
+                sys.exit(1)
+            time.sleep(0.05)
+        approaching = False
+        print("Reached trajectory start.")
 
         print(f"Streaming {q.shape[0]} servoJ waypoints at {1.0 / effective_control_period:.1f} Hz "
               f"(speed-scale x{speed_scale:.2f}) ...")
@@ -180,6 +202,8 @@ def execute_on_hardware(q, robot_ip, effective_control_period, lookahead_time, g
         print("Playback complete.")
     except KeyboardInterrupt:
         print("Interrupted -- stopping robot.")
+        if approaching:
+            rtde_c.stopJ()
     finally:
         rtde_c.servoStop()
         rtde_c.stopScript()

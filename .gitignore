@@ -1,3 +1,4 @@
 dataset/
 webui/.run/
 __pycache__/
+outputs/

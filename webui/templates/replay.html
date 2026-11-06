@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="instruction" id="r-instr"><span class="arrow">ROBOT</span><span class="txt">Connecting…</span></div>
+
+{% if not S.REPLAY_LEROBOT_SCRIPT %}
+<div class="notice error">replay/replay_lerobot.py is not in this checkout. Robot replay needs branch ur7e-dev7.0.</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Replay an episode on the UR7e</h2>
+  <p class="muted" style="margin-top:0">Plays the joint angles of one episode on the arm. The dataset has to be a
+    <strong>joint-angle</strong> LeRobot dataset (see <a href="#r-howto">How to make one</a> below), on this NUC or on
+    Hugging Face. The gripper is not replayed.</p>
+  <form id="r-form" autocomplete="off">
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <label class="field">Dataset (Hugging Face repo id, or a folder from the list)
+        <input type="text" id="r-dataset" list="r-local" placeholder="e.g. Nityavedula/UMI_2026-11-05_T0_a1_ur7e_joint" autocomplete="off">
+        <datalist id="r-local"></datalist>
+      </label>
+    </div>
+    <div class="small muted" id="r-info"></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr; margin-top:12px">
+      <label class="field">Episode
+        <select id="r-episode" disabled><option value="">—</option></select>
+      </label>
+      <label class="field">Speed
+        <select id="r-speed"></select>
+      </label>
+      <label class="field">Robot IP (from the pendant)
+        <input type="text" id="r-ip" placeholder="e.g. 192.168.1.102" autocomplete="off">
+      </label>
+    </div>
+  </form>
+</div>
+
+<div class="replay-steps">
+  <div class="panel rstep" id="r-step-dry">
+    <div class="rnum">1</div>
+    <h3>Dry run</h3>
+    <p class="small muted">No robot. Checks the joint limits, works out how long the replay takes at this speed, and
+      draws the joint angles.</p>
+    <button class="primary big" type="button" id="r-dry">Dry run</button>
+    <div class="rresult small" id="r-dry-res"></div>
+  </div>
+  <div class="panel rstep" id="r-step-check">
+    <div class="rnum">2</div>
+    <h3>Check the robot</h3>
+    <p class="small muted">Read-only: connects to the IP and reads where the arm is. <strong>Never moves it.</strong>
+      Compare the joints with the pendant of the robot you mean to move.</p>
+    <button class="primary big" type="button" id="r-check">Check robot</button>
+    <div class="rresult small" id="r-check-res"></div>
+    <label class="check" id="r-match-box" hidden><input type="checkbox" id="r-match"> These joints match the pendant of
+      the robot I want to move</label>
+  </div>
+  <div class="panel rstep" id="r-step-run">
+    <div class="rnum">3</div>
+    <h3>Run on the robot</h3>
+    <p class="small muted">Moves the arm slowly to the episode's start, then plays it. Workspace clear, hand on the
+      e-stop. You will be asked to type RUN.</p>
+    <div class="row">
+      <button class="go big" type="button" id="r-run">▶ Run on robot</button>
+      <button class="stop big" type="button" id="r-stop" disabled>■ Stop</button>
+    </div>
+    <div class="rresult small" id="r-run-res"></div>
+  </div>
+</div>
+
+<div class="panel st-stopped" id="r-job">
+  <div class="row"><span class="led"></span><h3 class="grow" style="margin:0">Progress</h3><span class="state-word">Off</span></div>
+  <div class="small muted" id="r-stage"></div>
+  <div class="progress" id="r-bar"><div></div></div>
+  <div class="row">
+    <div class="step-text grow" id="r-step"></div>
+    <button class="small" type="button" id="r-logbtn">Show log ▾</button>
+  </div>
+  <div class="readouts" id="r-readouts" hidden></div>
+  <div id="r-logbox" hidden style="margin-top:10px">
+    <div id="r-errors"></div>
+    <div class="tail" id="r-tail"></div>
+  </div>
+  <div id="r-plot-box" hidden style="margin-top:14px">
+    <div class="small muted">Joint angles as they will be played (dry run):</div>
+    <img id="r-plot" alt="Joint angles over time for the dry-run episode" style="max-width:100%; border-radius:8px; border:1px solid var(--line); background:#fff">
+  </div>
+  <div class="small muted" style="margin-top:10px">■ Stop asks the script to stop the arm. <strong>The e-stop is the
+    real stop</strong>: keep a hand on it.</div>
+</div>
+
+<div class="panel" id="r-howto">
+  <h2 style="margin-top:0">How to make a dataset you can replay</h2>
+  <p class="muted" style="margin-top:0">The robot needs joint angles. A normal Convert makes a camera + T265 pose
+    dataset, which the robot cannot play. Use the <strong>Advanced</strong> options on the Convert tab instead.</p>
+  <ol class="howto">
+    <li><strong>Record and Sync</strong> the dataset as usual. Converting for the robot needs the synced files on
+      this NUC: a dataset that is only on Hugging Face cannot be converted again.</li>
+    <li><strong>Calibration: where was the robot base for this task?</strong> The joint angles are worked out from
+      the robot base's position and orientation relative to where the T265 started. They come from
+      <code>config/config.json</code>. If this task was recorded with the base somewhere else, do not edit that
+      file (every other dataset uses it); make a copy for this task:
+      <div class="cmd">cp config/config.json config/calib_&lt;dataset&gt;.json</div>
+      and change, in the copy: <code>data_process_config.base_position</code> (x, y, z in metres),
+      <code>data_process_config.base_orientation</code> (roll, pitch, yaw in degrees) and
+      <code>ur7e_hardware.rest_joints_deg</code> (this task's home pose, from the pendant). Then reload this page so
+      Convert lists it.</li>
+    <li><strong>Convert tab → Advanced:</strong>
+      <ul>
+        <li><em>Output type</em>: <strong>Robot replay: joint angles</strong>.</li>
+        <li><em>Calibration file</em>: the copy from step 2 (or <code>config.json</code> if the base did not move).</li>
+        <li><em>FPS</em>: leave empty ({{ S.DATASET_FPS }}). <em>Only these episodes</em>: optional.</li>
+        <li><em>Include the camera video</em>: not needed by the robot; untick for a small dataset.</li>
+        <li><em>Push to Hugging Face</em> (optional) uploads it to <code>&lt;user&gt;/&lt;dataset&gt;_joint</code>,
+          separate from the camera dataset.</li>
+      </ul>
+      Press Convert. The result is in <code>&lt;dataset&gt;/lerobot_joint</code>, and it shows up in the dataset
+      list above.</li>
+    <li><strong>Check the Convert result.</strong> Each episode's line in the Convert log says
+      <code>reach=N/N … ok</code>. An episode with <code>VIOLATIONS</code> (shown as a problem) has poses the arm
+      cannot reach: the calibration is wrong, or the demo was recorded away from the calibrated spot. Do not replay
+      it.</li>
+    <li><strong>Replay here:</strong> pick the dataset and episode, then do steps 1 → 2 → 3. Episode numbers here are
+      the LeRobot episode index: <strong>0 is the first converted episode</strong>, not recorded episode 0.</li>
+  </ol>
+
+  <details class="more">
+    <summary>Safety, several robots, speed</summary>
+    <div class="inner small">
+      <p><strong>Several robots with the same IP:</strong> the NUC connects to whichever one answers, which can be a
+        different robot each time. Connect the NUC only to the robot you want (direct cable or its own switch), or
+        give each robot its own IP on the pendant. Put only that robot in <em>Remote Control</em>; a UR in
+        <em>Local</em> mode refuses outside programs. Step 2 shows the joints of the robot that answered: they must
+        match its pendant.</p>
+      <p><strong>Speed:</strong> playback is first slowed until it stays within the joint speed limits and the
+        acceleration limit in <code>config.json</code> (<code>joint_accel_limit_rad_s2</code>), then slowed again by
+        <em>Speed</em>. With the current limit a 20 s recording takes about 60 min at 0.1, 24 min at 0.25 and 6 min at
+        1.0. Above {{ S.REPLAY_FAST_SPEED }} you also type CONFIRM_FAST. To go faster, raise the acceleration limit
+        after checking it against the pendant's safety settings.</p>
+      <p><strong>Start pose:</strong> the move to the episode's start is very slow (0.03 rad/s × Speed). Jog the arm
+        near the start (shown in step 2) with the pendant first.</p>
+      <div class="cmd">{{ S.REPLAY_LEROBOT_SCRIPT or 'replay/replay_lerobot.py' }} &lt;dataset&gt; --episode N --speed S
+        [--check | --execute --yes] --robot-ip IP   (FastUMI env)</div>
+    </div>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='replay.js') }}"></script>
+{% endblock %}

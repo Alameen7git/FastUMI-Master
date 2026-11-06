@@ -167,6 +167,21 @@ EXPORT_FILE = 'lerobot_export.json'
 REPLAY_SCRIPT = _first_existing('replay_pipeline/make_replay_dataset.sh')
 REPLAY_SPACES = ['joint', 'cart-urbase', 'cart-baselink', 'cart-both', 'all']
 CONVERT_SPACES = ['pose'] + (REPLAY_SPACES if REPLAY_SCRIPT else [])
+# Calibration files Convert can use for the robot-replay outputs (CONFIG= for
+# make_replay_dataset.sh): config/*.json. The base position/orientation and the
+# home pose in it decide where the joint angles put the arm, so a task recorded
+# with the robot base somewhere else gets its own copy.
+CONFIG_DIR = os.path.join(REPO_ROOT, 'config')
+DEFAULT_CONFIG = 'config.json'
+
+# ── Robot page: replay a LeRobot joint dataset on the UR7e ───────────────────
+# [CONFIRMED] replay/replay_lerobot.py --help. Runs in the FastUMI env (ur_rtde);
+# it calls LEROBOT_PY itself to download / read the dataset. Dry run by default,
+# --check reads the robot without moving it, --execute moves it.
+REPLAY_LEROBOT_SCRIPT = _first_existing('replay/replay_lerobot.py')
+REPLAY_SPEEDS = [0.1, 0.25, 0.5, 1.0]    # fraction of the safety-retimed speed
+REPLAY_FAST_SPEED = 0.25                 # above this the operator also types CONFIRM_FAST
+REPLAY_OUT_DIR = os.path.join(REPO_ROOT, 'outputs', 'replay')   # dry-run plots
 
 # ── Step 7: visualize ─────────────────────────────────────────────────────────
 # [CONFIRMED] visualize_dataset.py argparse: --port (default 8000), --no-browser.

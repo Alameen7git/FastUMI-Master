@@ -30,22 +30,22 @@
       "urdf_path": "./assets/ur7e_robot.urdf",
       "aruco_dict": "DICT_4X4_50",
       "base_position": {
-          "x": -0.28487033,
-          "y": 0.72975902,
-          "z": 0.06338738
+          "x": -0.108227,
+          "y": 0.512617,
+          "z": 0.171197
       },
       "base_orientation": {
-          "roll": 87.39121905,
-          "pitch": 14.45328233,
-          "yaw": -99.77781447
+          "roll": 13.0222,
+          "pitch": 86.1893,
+          "yaw": 107.2479
       },
       "offset": {
           "x": 0.14565,
           "z": 0.1586
       },
       "distances": {
-          "marker_max": 552.0,
-          "marker_min": 116.0,
+          "marker_max": 835.0,
+          "marker_min": 320.0,
           "gripper_max": 255.0,
           "gripper_min": 0,
           "flange_to_tcp": 0.244
@@ -60,8 +60,8 @@
   "ur7e_hardware": {
       "_comment": "Restored after the block was dropped during a config edit. Position/velocity limits are parsed from assets/ur7e_robot.urdf at runtime; joint_accel_limit_rad_s2 is a config placeholder -- verify against the pendant Safety limits before hardware.",
       "robot_ip": "TODO_FILL_IN_ROBOT_IP",
-      "rest_joints_deg": [93.71, -54.77, 125.42, -250.60, -95.39, -184.31],
-      "_rest_joints_comment": "Physical arm start/rest pose from the UR pendant Move screen (Pick_and_place_the_bottle). validate_joint_trajectory.py re-winds each joint to the nearest revolution to this, so the startup move doesn't wind wrist_1/wrist_3 ~360deg the long way. Update if the home pose changes.",
+      "rest_joints_deg": [63.31, -110.96, 115.32, -97.77, -92.77, -206.36],
+      "_rest_joints_comment": "Physical arm start/rest pose from the UR pendant Move screen (start pose given 2026-11-04; base_position/base_orientation were fitted so the T265 start maps onto this pose). validate_joint_trajectory.py re-winds each joint to the nearest revolution to this, so the startup move doesn't wind wrist_1/wrist_3 ~360deg the long way. Update if the home pose changes.",
       "joint_accel_limit_rad_s2": 0.15,
       "servo_control_period_s": 0.002,
       "servo_lookahead_time_s": 0.2,

@@ -33,7 +33,10 @@ PI = np.pi
 # kinematics submodule itself only needs numpy+scipy, so we stub the parent
 # package in sys.modules to import just that submodule without triggering
 # the rest of the package.
-_EMBODIED_AI_ML_SRC = "/home/nuc8/embodied_ai_ml-main/src"  # machine-specific path -- this machine has no /dev/ prefix
+# The checkout lives in different places on different machines: use the first that exists.
+_EMBODIED_AI_ML_SRC = next((p for p in ("/home/nuc8/embodied_ai_ml-main/src",
+                                        "/home/nuc8/dev/embodied_ai_ml-main/src")
+                            if os.path.isdir(p)), "/home/nuc8/embodied_ai_ml-main/src")
 if _EMBODIED_AI_ML_SRC not in sys.path:
     sys.path.insert(0, _EMBODIED_AI_ML_SRC)
 if "embodied_ai_ml" not in sys.modules:
@@ -93,9 +96,17 @@ print(f"Analytic UR7e IK ready (embodied_ai_ml.kinematics), reach@0={_ARM.reach_
 _T265_TO_ROBOT = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])  # test: sign-flipped fit, A->B=+Y (away from base), B->C=+X
 
 
-def remap_t265_to_robot(x, y, z, qx, qy, qz, qw):
+def remap_t265_to_robot(x, y, z, qx, qy, qz, qw, ref_quat=None):
+    """ref_quat: the episode's frame-0 T265 quaternion. When given, the T265 rotation
+    since frame 0 is re-expressed in robot axes (same _T265_TO_ROBOT remap as the
+    position), so tilting the UMI up tilts the robot tool up instead of turning it
+    sideways. Frame 0 comes out identical to the old formula, so the start pose /
+    base calibration is unchanged. Without ref_quat: the old behaviour."""
     pos = _T265_TO_ROBOT @ np.array([x, y, z], dtype=np.float64)
     m = R.from_quat([qx, qy, qz, qw]).as_matrix() @ _T265_TO_ROBOT.T
+    if ref_quat is not None:
+        M, R0 = _T265_TO_ROBOT, R.from_quat(ref_quat).as_matrix()
+        m = M @ R.from_quat([qx, qy, qz, qw]).as_matrix() @ R0.T @ M.T @ R0 @ M.T
     qx, qy, qz, qw = R.from_matrix(m).as_quat()
     return pos[0], pos[1], pos[2], qx, qy, qz, qw
 
@@ -107,7 +118,10 @@ aruco_dict = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, config["aruco_
 # factory instead. This machine's opencv-contrib-python==4.13.0 has already
 # dropped that legacy factory entirely (AttributeError) and DetectorParameters()
 # itself works fine here (verified directly) -- machine-specific, not ported.
-parameters = cv2.aruco.DetectorParameters()
+# Legacy factory where it exists (OpenCV 4.6 segfaults on DetectorParameters()),
+# the constructor where the factory was removed (OpenCV >= 4.7).
+parameters = (cv2.aruco.DetectorParameters_create() if hasattr(cv2.aruco, "DetectorParameters_create")
+              else cv2.aruco.DetectorParameters())
 
 
 
@@ -138,66 +152,53 @@ def cartesian_to_joints(position, quaternion, initial_joint_angles):
     return q
 
 
-def get_gripper_width(img_list):
-    """
-    Calculate gripper width from detected ArUco markers in the images.
-    """
-    distances = []
-    distances_index = []
-    current_frame = 0
-    frame_count = len(img_list)
+GRIPPER_MAX_GAP = 15      # frames: gaps between both-tag frames up to this are interpolated
+GRIPPER_MEDIAN = 5        # frames: median filter width (odd)
 
-    for i in range(img_list.shape[0]):
+
+def get_gripper_width(img_list):
+    """Gripper width per frame (0..gripper_max, 0 = closed) from ArUco tags 0 and 1.
+
+    Uses the tag-to-tag distance from frames where BOTH tags are seen, linearly
+    interpolated across gaps of up to GRIPPER_MAX_GAP frames. Only for longer gaps
+    does it fall back to the one-tag guess (|image centre - tag x| * 2), which
+    scatters about +-0.1 of full range and made the gripper jitter. A
+    GRIPPER_MEDIAN-frame median filter then removes remaining single-frame spikes.
+    Always returns exactly len(img_list) values."""
+    T = len(img_list)
+    ids_wanted = (config["marker_id_0"], config["marker_id_1"])
+    two = np.full(T, np.nan); one = np.full(T, np.nan)
+    for i in range(T):
         gray = cv2.cvtColor(img_list[i, :, :, :], cv2.COLOR_BGR2GRAY)
         corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-        current_frame += 1
+        centers = {}
         if ids is not None:
-            
-            marker_centers = []
             for idx, marker_id in enumerate(ids.flatten()):
-                if marker_id in [config["marker_id_0"], config["marker_id_1"]]:
-                    marker_corners = corners[idx][0]
-                    center = np.mean(marker_corners, axis=0).astype(int)
-                    marker_centers.append(center)
+                if marker_id in ids_wanted:
+                    centers[int(marker_id)] = np.mean(corners[idx][0], axis=0)
+        if len(centers) == 2:
+            c0, c1 = centers.values()
+            two[i] = np.linalg.norm(c0 - c1)
+        elif len(centers) == 1:
+            one[i] = abs(gray.shape[1] / 2 - next(iter(centers.values()))[0]) * 2
 
-            if len(marker_centers) >= 2:
-                distance = np.linalg.norm(marker_centers[0] - marker_centers[1])
-                distances.append(distance)
-                distances_index.append(current_frame)
-            elif len(marker_centers) == 1:
-                distance = abs(gray.shape[1] / 2 - marker_centers[0][0]) * 2
-                distances.append(distance)
-                distances_index.append(current_frame)
-
-    distances = np.array(distances)
-    distances_index = np.array(distances_index)
-    distances = ((distances - config["distances"]["marker_min"]) / (config["distances"]["marker_max"] - config["distances"]["marker_min"]) * config["distances"]["gripper_max"]).astype(np.int16).clip(0, config["distances"]["gripper_max"])
-
-    new_distances = []
-    for i in range(len(distances) - 1):
-        if i == 0:
-            if distances_index[i] == 1:
-                new_distances.append(distances[0])
-                continue
-            else:
-                for _ in range(distances_index[0]):
-                    new_distances.append(distances[0])
-        else:
-            if distances_index[i + 1] - distances_index[i] == 1:
-                new_distances.append(distances[i])
-            else:
-                for k in range(distances_index[i + 1] - distances_index[i]):
-                    interpolated_distance = int(
-                        k * (distances[i + 1] - distances[i]) /
-                        (distances_index[i + 1] - distances_index[i]) +
-                        distances[i])
-                    new_distances.append(interpolated_distance)
-    new_distances.append(distances[-1])
-    if len(new_distances) < frame_count:
-        for _ in range(frame_count - len(new_distances)):
-            new_distances.append(distances[-1])
-
-    return np.array(new_distances)
+    d = config["distances"]
+    scale = lambda x: np.clip((x - d["marker_min"]) / (d["marker_max"] - d["marker_min"]), 0, 1) * d["gripper_max"]
+    ok = np.where(~np.isnan(two))[0]
+    if len(ok) == 0:                       # never saw both tags: one-tag guess, else fully open
+        width = scale(one)
+    else:
+        width = np.interp(np.arange(T), ok, scale(two[ok]))
+        for a, b in zip(ok[:-1], ok[1:]):
+            if b - a > GRIPPER_MAX_GAP:    # long gap: use the one-tag guess where there is one
+                seg = np.arange(a + 1, b); m = ~np.isnan(one[seg])
+                width[seg[m]] = scale(one[seg[m]])
+    width = np.where(np.isnan(width), d["gripper_max"], width)
+    if T >= GRIPPER_MEDIAN:
+        h = GRIPPER_MEDIAN // 2
+        padded = np.pad(width, h, mode='edge')
+        width = np.median(np.stack([padded[k:k + T] for k in range(GRIPPER_MEDIAN)]), axis=0)
+    return width
 
 def transform_to_base_quat(x, y, z, qx, qy, qz, qw, T_base_to_local):
     rotation_local = R.from_quat([qx, qy, qz, qw]).as_matrix()
@@ -236,7 +237,8 @@ def normalize_ik_and_save_hdf5(args):
                 x, y, z, qx, qy, qz, qw = normalized_qpos[i, 0:7]
                 x -= config["offset"]["x"]
                 z += config["offset"]["z"]
-                x, y, z, qx, qy, qz, qw = remap_t265_to_robot(x, y, z, qx, qy, qz, qw)
+                x, y, z, qx, qy, qz, qw = remap_t265_to_robot(x, y, z, qx, qy, qz, qw,
+                                                              ref_quat=qpos_data[0, 3:7])
                 x_base, y_base, z_base, qx_base, qy_base, qz_base, qw_base, _, _, _ = transform_to_base_quat(
                     x, y, z, qx, qy, qz, qw, T_base_to_local)
                 ori = R.from_quat([qx_base, qy_base, qz_base, qw_base]).as_matrix()

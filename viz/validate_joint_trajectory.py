@@ -126,13 +126,22 @@ def convert_and_diagnose(episode_path, config, lock_branch=None):
         x, y, z, qx, qy, qz, qw = normalized_qpos[i, 0:7]
         x -= dcfg['offset']['x']
         z += dcfg['offset']['z']
-        x, y, z, qx, qy, qz, qw = dpj.remap_t265_to_robot(x, y, z, qx, qy, qz, qw)
+        x, y, z, qx, qy, qz, qw = dpj.remap_t265_to_robot(x, y, z, qx, qy, qz, qw,
+                                                          ref_quat=qpos_data[0, 3:7])
         x_base, y_base, z_base, qx_base, qy_base, qz_base, qw_base, _, _, _ = dpj.transform_to_base_quat(
             x, y, z, qx, qy, qz, qw, T_base_to_local)
         ori = dpj.R.from_quat([qx_base, qy_base, qz_base, qw_base]).as_matrix()
         pos = np.array([x_base, y_base, z_base])
         pos += dcfg['offset']['x'] * ori[:, 2]
-        pos -= dcfg['offset']['z'] * ori[:, 0]
+        # The sideways T265->UMI-tip offset lies along the flange's y axis on this rig
+        # (the UMI sits 90 deg about the tool axis from the flange, like the 2F-140
+        # mount). Applying it along x put the robot ~4 cm too low at the pick and
+        # ~10-13 cm too high at the place (UMI tilted ~75 deg there). Anchored at
+        # frame 0, so the start pose / base calibration are unchanged.
+        if i == 0:
+            ori0 = ori.copy()
+        pos -= dcfg['offset']['z'] * ori[:, 1]
+        pos += dcfg['offset']['z'] * (ori0[:, 1] - ori0[:, 0])
         normalized_qpos[i, :] = [pos[0], pos[1], pos[2], qx_base, qy_base, qz_base, qw_base]
 
     joint_traj = np.zeros((T, 6))

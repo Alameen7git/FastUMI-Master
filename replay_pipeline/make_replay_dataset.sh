@@ -38,6 +38,8 @@
 #                        cart-baselink  TCP [x,y,z,qx,qy,qz,qw,grip], ROS base_link
 #                        cart-both      both Cartesian folders (<out>_urbase / _baselink)
 #                        all            joint + both Cartesian folders
+#   --gripper-binary T open/close gripper like the robot's own recordings: 0.0 (closed)
+#                      when the UMI openness is below T, else 1.0 (open). e.g. 0.9
 #   -h | --help        show this help
 #
 # The two Python interpreters are auto-detected but can be overridden with the
@@ -49,7 +51,7 @@ FASTUMI_PY="${FASTUMI_PY:-/home/nuc8/miniconda3/envs/FastUMI/bin/python3}"
 LEROBOT_PY="${LEROBOT_PY:-/home/nuc8/miniconda3/bin/python3}"
 CONFIG="${CONFIG:-$HERE/../config/config.json}"
 
-TASK="" ; SRC="" ; OUT="" ; FPS="20" ; TASK_NAME="" ; REPO_ID="" ; EPISODES="" ; WITH_VIDEO=0 ; LOCK_BRANCH="" ; SPACE="joint"
+TASK="" ; SRC="" ; OUT="" ; FPS="20" ; TASK_NAME="" ; REPO_ID="" ; EPISODES="" ; WITH_VIDEO=0 ; LOCK_BRANCH="" ; SPACE="joint" ; GRIPPER_BINARY=""
 INTERMEDIATE="$HERE/../outputs/d1_lerobot_intermediate"
 
 while [[ $# -gt 0 ]]; do
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --with-video) WITH_VIDEO=1; shift;;
     --lock-branch) LOCK_BRANCH="$2"; shift 2;;
     --space)       SPACE="$2"; shift 2;;
+    --gripper-binary) GRIPPER_BINARY="$2"; shift 2;;
     -h|--help)    tail -n +2 "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1 (try --help)"; exit 1;;
   esac
@@ -103,6 +106,7 @@ echo; echo ">>> STAGE 1/2  (FastUMI env)  raw pose -> joints + gripper + winding
 S1=( "$FASTUMI_PY" "$HERE/d1_to_lerobot_stage1.py" --src "$SRC" --config "$CONFIG" --out-dir "$INTERMEDIATE" )
 [[ -n "$EPISODES" ]] && S1+=( --episodes "$EPISODES" )
 [[ -n "$LOCK_BRANCH" ]] && S1+=( --lock-branch "$LOCK_BRANCH" )
+[[ -n "$GRIPPER_BINARY" ]] && S1+=( --gripper-binary "$GRIPPER_BINARY" )
 "${S1[@]}"
 
 # Stage 1 always computes joints AND both Cartesian representations, so stage 2

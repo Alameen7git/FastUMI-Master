@@ -72,7 +72,28 @@ def hdf5_frame_dt(episode_path, T):
     return np.full(max(T - 1, 1), 1.0 / FALLBACK_FPS), False
 
 
-def process_episode(episode_path, config, episode_index, lock_branch=None):
+def binarize_gripper(g, thresh, band=0.05, min_frames=5):
+    """Open/close gripper like the robot's own recordings: 1.0 = open, 0.0 = closed.
+    The UMI openness while holding an object is the object's width (~0.7 on the
+    bottle), which a position-controlled Robotiq would stop short at; commanding
+    0.0 instead lets it close on the object and grip with its force setting.
+    Hysteresis: closes when g < thresh - band, opens when g > thresh + band.
+    Open/closed runs shorter than min_frames are merged into their neighbours."""
+    out = np.empty_like(g); state = 1.0 if g[0] >= thresh else 0.0
+    for i, v in enumerate(g):
+        if state == 1.0 and v < thresh - band: state = 0.0
+        elif state == 0.0 and v > thresh + band: state = 1.0
+        out[i] = state
+    i = 0
+    while i < len(out):                       # drop blips shorter than min_frames
+        j = i
+        while j < len(out) and out[j] == out[i]: j += 1
+        if j - i < min_frames and i > 0 and j < len(out): out[i:j] = out[i - 1]
+        i = j
+    return out
+
+
+def process_episode(episode_path, config, episode_index, lock_branch=None, gripper_binary=None):
     dcfg = config['data_process_config']
     hw = config.get('ur7e_hardware', {})
 
@@ -100,6 +121,8 @@ def process_episode(episode_path, config, episode_index, lock_branch=None):
         else:
             gripper = gripper[:T]
     gripper = np.clip(gripper, 0.0, 1.0)
+    if gripper_binary is not None:
+        gripper = binarize_gripper(gripper, gripper_binary)
 
     # 4) action = [6 joints, gripper]; velocity = d(joints)/dt with gripper vel = 0.
     action = np.concatenate([joint_traj, gripper[:, None]], axis=1).astype(np.float32)
@@ -169,6 +192,9 @@ def main():
                     help='force one kinematic branch 0..7 every frame (e.g. 5 = elbow-up). '
                          'Prevents silent config flips; unreachable frames on that branch are '
                          'flagged (any_violation) and hold the previous joints.')
+    ap.add_argument('--gripper-binary', type=float, default=None, metavar='THRESH',
+                    help='open/close gripper: 0.0 (closed) below THRESH, 1.0 (open) above, '
+                         'like the robot-recorded datasets (e.g. 0.9). Default: continuous 0..1.')
     args = ap.parse_args()
 
     with open(args.config) as f:
@@ -196,7 +222,8 @@ def main():
             print(f'  (missing: {path}) -- skipped')
             continue
         stem = os.path.splitext(os.path.basename(path))[0]
-        res = process_episode(path, config, ep_i, lock_branch=args.lock_branch)
+        res = process_episode(path, config, ep_i, lock_branch=args.lock_branch,
+                              gripper_binary=args.gripper_binary)
         out = os.path.join(args.out_dir, f'{stem}.npz')
         np.savez(out, **{k: v for k, v in res.items()})
         rewound = ', '.join(

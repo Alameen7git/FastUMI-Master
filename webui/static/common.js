@@ -6,7 +6,7 @@ const FUI = {
   status: null,
   logs: {},            // source -> [{seq,t,src,line}], capped per source
   PER_SOURCE: 2000,
-  SOURCES: ['ROS', 'T265', 'GoPro', 'Collection', 'Preview', 'Sync', 'Convert', 'Push', 'Viz', 'UI'],
+  SOURCES: ['ROS', 'T265', 'Home', 'GoPro', 'Collection', 'Preview', 'Sync', 'Convert', 'Push', 'Viz', 'UI'],
 };
 
 async function api(path, body) {

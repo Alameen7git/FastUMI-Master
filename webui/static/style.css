@@ -423,3 +423,13 @@ body.recording header { display: none; }
 .last-num { font-weight: 400; margin-top: 2px; }
 .last-num strong { color: var(--text); }
 .tnum-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+/* T265 home check (Record page) */
+.home-panel .row { align-items: center; gap: 14px; }
+.home-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px;
+  font-size: 20px; font-weight: 700; background: var(--well); color: var(--muted); border: 2px solid var(--line); }
+.home-chip.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.home-chip.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.home-chip.bad, .home-chip.jump { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+.home-chip.jump { animation: pulse 1.2s ease-in-out infinite; }
+.home-panel .readout .v.small-v, #h-jumps { font-size: 18px; }

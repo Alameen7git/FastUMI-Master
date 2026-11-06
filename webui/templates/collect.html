@@ -20,6 +20,24 @@
 
 <!-- Record: pick a task and go -->
 <div id="sub-record">
+  <!-- T265 home check: shown while the T265 runs -->
+  <div class="panel home-panel" id="h-panel" hidden>
+    <div class="row">
+      <span class="home-chip" id="h-chip">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 3 2 11.5h3V21h5.5v-6h3v6H19v-9.5h3z"/></svg>
+        <span id="h-word">T265 home</span>
+      </span>
+      <span class="grow small muted" id="h-hint"></span>
+    </div>
+    <div class="readouts" id="h-readouts">
+      <div class="readout"><div class="k">Distance from home</div><div class="v" id="h-dist">—</div></div>
+      <div class="readout"><div class="k">Rotation from home</div><div class="v" id="h-rot">—</div></div>
+      <div class="readout"><div class="k">X / Y / Z (cm)</div><div class="v small-v" id="h-xyz">—</div></div>
+      <div class="readout"><div class="k">T265 jumps</div><div class="v" id="h-jumps">—</div></div>
+    </div>
+    <div class="small muted" id="h-meta"></div>
+  </div>
+
   <div class="panel" id="c-setup">
     <form id="collect-form" autocomplete="off">
       <div class="form-grid">

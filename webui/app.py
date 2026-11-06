@@ -26,7 +26,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import settings as S  # noqa: E402
-from jobs import FAILED, RUNNING, STARTING, Job, LogHub, Registry  # noqa: E402
+from jobs import FAILED, RUNNING, STARTING, STOPPING, Job, LogHub, Registry  # noqa: E402
 
 from flask import Flask, jsonify, render_template, request  # noqa: E402
 
@@ -382,6 +382,10 @@ JOBS = {
                    ready_timeout=20),
     'push': Job('push', 'Push', hub, registry, kind='batch', on_line=push_line,
                 on_exit=lambda j: remember_push(j)),
+    'home': Job('home', 'Home', hub, registry,
+                ready_check=http_check('http://127.0.0.1:{}/pose'.format(S.HOME_PORT)),
+                health_check=http_check('http://127.0.0.1:{}/pose'.format(S.HOME_PORT)),
+                ready_timeout=30),
 }
 NODE_ORDER = ['ros', 't265', 'gopro']           # start order; stop is reversed
 NODE_CMDS = {
@@ -408,8 +412,33 @@ def monitor():
                 continue
             elif tick % 3 == 0:
                 threading.Thread(target=job.poll_health, daemon=True).start()
+        background(follow_t265)
         tick += 1
         time.sleep(2)
+
+
+follow_lock = threading.Lock()
+
+
+def follow_t265():
+    """Run the home check while the T265 is green; restart it whenever the
+    T265 node starts, so it captures the new home (the T265 origin)."""
+    if not follow_lock.acquire(blocking=False):
+        return
+    try:
+        t265, home = JOBS['t265'], JOBS['home']
+        current = home.meta.get('t265_started') == t265.started_at
+        if home.alive() and (not t265.alive() or not current):
+            home.stop()
+        if is_green('t265') and not home.alive() and home.state != STOPPING:
+            if port_open(S.HOME_PORT):
+                return    # something else holds the port; /api/home reports it
+            cmd = S.FASTUMI_PREFIX + 'exec python3 -u {} --topic {} --port {} --t265-age {:.0f} --jump-mm {}'.format(
+                S.HOME_SCRIPT, shlex.quote(S.T265_TOPIC), S.HOME_PORT, time.time() - t265.started_at,
+                S.JUMP_MM_PER_SAMPLE)
+            home.start(cmd, meta={'t265_started': t265.started_at})
+    finally:
+        follow_lock.release()
 
 
 # ── node control ──────────────────────────────────────────────────────────────
@@ -1385,6 +1414,38 @@ def api_preview(action):
         S.PREVIEW_SCRIPT, shlex.quote(S.PREVIEW_TOPIC), S.PREVIEW_PORT, S.PREVIEW_WIDTH, S.PREVIEW_FPS)
     good, why = job.start(cmd)
     return ok() if good else bad(why)
+
+
+# ── T265 home check ───────────────────────────────────────────────────────────
+def home_level(mm, deg):
+    if mm <= S.HOME_OK_MM and deg <= S.HOME_OK_DEG:
+        return 'ok'
+    if mm <= S.HOME_WARN_MM and deg <= S.HOME_WARN_DEG:
+        return 'warn'
+    return 'bad'
+
+
+@app.route('/api/home')
+def api_home():
+    """Live distance of the UMI from the T265 origin (home)."""
+    limits = {'ok_mm': S.HOME_OK_MM, 'ok_deg': S.HOME_OK_DEG,
+              'warn_mm': S.HOME_WARN_MM, 'warn_deg': S.HOME_WARN_DEG}
+    job = JOBS['home']
+    if not job.alive():
+        why = ('The T265 is not running.' if not JOBS['t265'].alive() else
+               'Port {} is in use by another program (change HOME_PORT in webui/settings.py).'.format(S.HOME_PORT)
+               if is_green('t265') and port_open(S.HOME_PORT) else 'Starting…')
+        return ok(available=False, reason=why, **limits)
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:{}/pose'.format(S.HOME_PORT), timeout=0.5) as r:
+            pose = json.load(r)
+    except Exception:
+        return ok(available=False, reason='Waiting for the first T265 pose…', **limits)
+    jump = pose['last_jump']
+    level = ('stale' if pose['age_s'] > 1.0 else
+             'jump' if jump and jump['ago_s'] < S.JUMP_ALERT_S else
+             home_level(pose['dist_mm'], pose['rot_deg']))
+    return ok(available=True, level=level, jump_mm=S.JUMP_MM_PER_SAMPLE, **pose, **limits)
 
 
 # ── Hugging Face Hub ──────────────────────────────────────────────────────────

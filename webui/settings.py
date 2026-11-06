@@ -119,7 +119,7 @@ def _first_existing(*candidates):
 # The camera records at 60 fps; --fps 30 keeps every 2nd frame.
 SYNC_SCRIPT = _first_existing('conversion/convert_episodes.py', 'convert_episodes.py')
 SYNC_DEFAULT_PARALLEL = 2
-DATASET_FPS = 30   # frame rate of synced episodes and LeRobot datasets
+DATASET_FPS = 20   # frame rate of synced episodes and LeRobot datasets (60 fps camera / 3)
 # Log of episodes deleted on the Delete page, kept in each dataset folder; it is
 # copied into the LeRobot dataset and shown on the Hugging Face dataset card.
 DELETED_EPISODES_FILE = 'deleted_episodes.json'
@@ -171,6 +171,21 @@ PREVIEW_PORT = 8081
 PREVIEW_TOPIC = GOPRO_TOPIC
 PREVIEW_WIDTH = 640
 PREVIEW_FPS = 10
+
+# ── T265 home check (Record page) ─────────────────────────────────────────────
+# webui/home_monitor.py follows the T265 pose and reports how far the UMI is
+# from where the T265 started (its origin). Start the T265 with the UMI in the
+# start holder: back in the holder it must read ~0, anything else is drift.
+# It runs whenever the T265 is green and is restarted with it.
+HOME_SCRIPT = 'webui/home_monitor.py'
+HOME_PORT = 8082
+HOME_OK_MM, HOME_OK_DEG = 20, 3        # green: at home
+HOME_WARN_MM, HOME_WARN_DEG = 50, 6    # amber up to here, red beyond
+# A step larger than this between two consecutive T265 poses (200 Hz) is the
+# T265 snapping its estimate, not hand motion. T11_N1 (2026-11-03): hand motion
+# <= ~17 mm/sample, jumps 239-357 mm. The panel stays red this long after one.
+JUMP_MM_PER_SAMPLE = 30
+JUMP_ALERT_S = 15
 
 # ── Hugging Face Hub push ─────────────────────────────────────────────────────
 # webui/push_to_hub.py takes the same flags as replay_pipeline/push_dataset_to_hub.py

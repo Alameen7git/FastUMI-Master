@@ -816,3 +816,53 @@ document.addEventListener('fui:status', e => {
 refreshData();
 loadHF();
 setInterval(refreshData, 5000);
+
+// ── T265 home check ─────────────────────────────────────────────────────────
+// Live. Home = where the T265 started. In the home holder it must read ~0;
+// anything else is drift. A jump (the T265 snapping its estimate) turns the
+// panel red at once: a take can end "at home" only because of such a snap.
+const HOME_WORD = {ok: 'At home', warn: 'Near home', bad: 'Off home', jump: 'T265 jumped',
+                   stale: 'T265 not sending'};
+const cm = mm => (mm / 10).toFixed(1);
+
+function renderHome(r) {
+  const off = !r.ok || !r.available;
+  $('h-chip').className = 'home-chip ' + (off ? 'off' : r.level);
+  if (off) {
+    $('h-word').textContent = 'T265 home';
+    $('h-hint').textContent = r.reason || r.error || '';
+    ['h-dist', 'h-rot', 'h-xyz', 'h-jumps'].forEach(id => { $(id).textContent = '—'; });
+    $('h-meta').textContent = '';
+    return;
+  }
+  const jump = r.last_jump;
+  $('h-word').textContent = {
+    warn: HOME_WORD.warn + ': ' + cm(r.dist_mm) + ' cm, ' + r.rot_deg.toFixed(1) + '°',
+    bad: HOME_WORD.bad + ': ' + cm(r.dist_mm) + ' cm, ' + r.rot_deg.toFixed(1) + '°',
+    jump: HOME_WORD.jump + ' ' + cm(jump ? jump.mm : 0) + ' cm',
+  }[r.level] || HOME_WORD[r.level];
+  $('h-hint').textContent = {
+    ok: 'Within ' + cm(r.ok_mm) + ' cm and ' + r.ok_deg + '° of where the T265 started.',
+    warn: 'Put the UMI in the home holder. If it still reads this in the holder, the T265 has drifted.',
+    bad: 'In the holder and still off? The T265 has drifted: restart it with the UMI in the holder.',
+    jump: 'The T265 position jumped (no hand moves that fast). If a take is running, redo it (R).',
+    stale: 'No pose for ' + r.age_s.toFixed(1) + ' s. Check the T265 on the Machines page.',
+  }[r.level];
+  $('h-dist').textContent = cm(r.dist_mm) + ' cm';
+  $('h-rot').textContent = r.rot_deg.toFixed(1) + '°';
+  $('h-xyz').textContent = [r.x_mm, r.y_mm, r.z_mm].map(cm).join(' / ');
+  $('h-jumps').textContent = r.jumps + (jump ? ' (last ' + cm(jump.mm) + ' cm, ' + Math.round(jump.ago_s) + ' s ago)' : '');
+  $('h-meta').textContent = 'Home = where the T265 started (' + new Date(r.home_at * 1000).toLocaleTimeString() + ')' +
+    (r.restarts ? '. The T265 stream restarted ' + r.restarts + '×, home was set again: only right if the UMI was in the holder' : '') +
+    (r.home_approx ? '. Rotation home is approximate (the T265 was already running when the check started)' : '') +
+    '. Jump = more than ' + cm(r.jump_mm) + ' cm between two poses (5 ms).';
+}
+
+async function pollHome() {
+  const s = FUI.status;
+  const show = !!(s && s.jobs.t265.alive);
+  $('h-panel').hidden = !show;
+  if (show) renderHome(await api('/api/home'));
+  setTimeout(pollHome, 300);
+}
+pollHome();

@@ -59,7 +59,30 @@ T265_CMD = 'roslaunch realsense2_camera rs_t265.launch'
 # [CONFIRMED] start_collection.sh window [3/4]. The launch file runs usb_cam
 # (Elgato capture of the GoPro HDMI feed) plus an `image_view` node, which is
 # the on-screen preview window that appears as soon as the node starts.
-GOPRO_CMD = 'roslaunch {}'.format(os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
+# {device} and {pixel_format} come from the capture card found when the camera starts (see below).
+GOPRO_CMD = 'roslaunch {} video_device:={{device}} pixel_format:={{pixel_format}}'.format(
+    os.path.join(REPO_ROOT, 'usb_cam-test.launch'))
+
+# ── Capture card ──────────────────────────────────────────────────────────────
+# Cards of the same model differ in USB product id and serial (two Elgato 4K S
+# cards here: 0fd9:00ae and 0fd9:00af), so the UI does not rely on the
+# /dev/elgato udev name: it uses the first capture node (/dev/videoN, index 0)
+# of any card from these USB vendors. While the camera is wanted, a swapped or
+# re-plugged card restarts it on the new card, and a camera started with no
+# card starts once one is plugged in. FASTUMI_CAPTURE_DEVICE=/dev/videoN forces one.
+CAPTURE_VENDORS = {'0fd9': 'Elgato'}
+CAPTURE_DEVICE = os.environ.get('FASTUMI_CAPTURE_DEVICE', '')
+CARD_POLL_S = 1.0      # how often to look for the card
+# What the card sends, by USB speed. Measured with the Elgato 4K S on USB 3
+# (2026-11-05): its MJPEG frames are ~890 KB, and usb_cam decodes them on one
+# core at only ~54 fps (recordings came out at 50.6 fps); uncompressed YUYV
+# needs no decoding and holds 59.9 fps at ~50% of one core. YUYV 1080p60 does
+# not fit through USB 2, where the (smaller) MJPEG frames kept up at 60 fps.
+# FASTUMI_PIXEL_FORMAT=mjpeg|yuyv forces one.
+PIXEL_FORMAT_USB3 = 'yuyv'
+PIXEL_FORMAT_USB2 = 'mjpeg'
+PIXEL_FORMAT = os.environ.get('FASTUMI_PIXEL_FORMAT', '')
+CARD_SETTLE_S = 2.0    # wait after a card appears before opening it
 
 
 def _load_config():
@@ -144,6 +167,21 @@ EXPORT_FILE = 'lerobot_export.json'
 REPLAY_SCRIPT = _first_existing('replay_pipeline/make_replay_dataset.sh')
 REPLAY_SPACES = ['joint', 'cart-urbase', 'cart-baselink', 'cart-both', 'all']
 CONVERT_SPACES = ['pose'] + (REPLAY_SPACES if REPLAY_SCRIPT else [])
+# Calibration files Convert can use for the robot-replay outputs (CONFIG= for
+# make_replay_dataset.sh): config/*.json. The base position/orientation and the
+# home pose in it decide where the joint angles put the arm, so a task recorded
+# with the robot base somewhere else gets its own copy.
+CONFIG_DIR = os.path.join(REPO_ROOT, 'config')
+DEFAULT_CONFIG = 'config.json'
+
+# ── Robot page: replay a LeRobot joint dataset on the UR7e ───────────────────
+# [CONFIRMED] replay/replay_lerobot.py --help. Runs in the FastUMI env (ur_rtde);
+# it calls LEROBOT_PY itself to download / read the dataset. Dry run by default,
+# --check reads the robot without moving it, --execute moves it.
+REPLAY_LEROBOT_SCRIPT = _first_existing('replay/replay_lerobot.py')
+REPLAY_SPEEDS = [0.1, 0.25, 0.5, 1.0]    # fraction of the safety-retimed speed
+REPLAY_FAST_SPEED = 0.25                 # above this the operator also types CONFIRM_FAST
+REPLAY_OUT_DIR = os.path.join(REPO_ROOT, 'outputs', 'replay')   # dry-run plots
 
 # ── Step 7: visualize ─────────────────────────────────────────────────────────
 # [CONFIRMED] visualize_dataset.py argparse: --port (default 8000), --no-browser.

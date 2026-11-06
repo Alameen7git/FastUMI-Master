@@ -38,6 +38,7 @@ Physical prototypes of Fast-UMI system
   - [1.3 🛒 Install the necessary ROS packages](#13--install-the-necessary-ros-packages)
   - [1.4 📺 Intel RealSense Dependencies](#14--intel-realsense-dependencies)
   - [1.5 📷 GoPro Setup](#15--gopro-setup)
+  - [1.6 🔌 Capture Card: Use a USB 3 Port](#16--capture-card-use-a-usb-3-port)
 - [2. 📝 Workflow](#2--workflow)
   - [2.0 💻 Web UI (Desktop Icon)](#20--web-ui-desktop-icon)
   - [2.1 🌏 Start ROS Core](#21--start-ros-core)
@@ -108,6 +109,29 @@ If your system is missing RealSense dependencies, follow these steps:
 * Set date and time.
 * Scan the following QR code for GoPro setting.
 <br><img width="50%" src="camera_setting_code.jpg">
+
+### 1.6 🔌 Capture Card: Use a USB 3 Port
+The GoPro's HDMI goes into an Elgato capture card (Elgato 4K S), which plugs into the NUC by USB.
+**Plug the card into a USB 3 port on the NUC**, with the cable that came with the card and no
+hub in between. USB 3 ports are usually blue inside or marked **SS** (SuperSpeed).
+
+Why it matters: on USB 3 the web UI has the card send uncompressed 1080p60 video (YUYV), which
+needs no decoding and records at a full 60 fps (measured 59.95 fps on 2026-11-05). Uncompressed
+1080p60 is about 2 Gbit/s, which does not fit through USB 2 (480 Mbit/s), so on USB 2 the card
+can only send compressed MJPEG, and whether that reaches 60 fps depends on the card. MJPEG from
+the current card recorded at only 49–51 fps (15–18% of frames missing). USB 3 + YUYV is the
+setup that was measured at 60 fps.
+
+To check which port the card is on:
+* In the web UI log, when the camera starts, the line should read
+  `[GoPro] capture card: Elgato 4K S (serial …) USB 3 at /dev/video0, sending YUYV`.
+  If it says `USB 2` and `sending MJPEG`, move the card to another port (or try another cable).
+* Or in a terminal: `lsusb -t`. The card's `uvcvideo` lines should show `5000M` (USB 3), not `480M` (USB 2).
+
+After recording, `python3 viz/check_fps.py` checks the real frame rate of the newest dataset
+(`python3 viz/check_fps.py <dataset>` for another one). See
+[docs/2026-11-05_capture_card_and_60fps.md](docs/2026-11-05_capture_card_and_60fps.md) for details.
+
 ---
 
 ## 2. 📝 Workflow

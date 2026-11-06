@@ -2,7 +2,7 @@
 
 Local Flask UI for the whole collection workflow, as five numbered steps in the top bar:
 **1 Machines** (ROS / T265 / camera) → **2 Record** (`data_collection.py`) → **3 Sync** →
-**4 Convert** (LeRobot) → **5 View**. Each step has a light in the top bar, one big button and
+**4 Convert** (LeRobot) → **5 View**, plus **Delete** and **Robot** (replay an episode on the UR7e). Each step has a light in the top bar, one big button and
 a one-line instruction saying what to do next. Commands and extra options sit under the
 *Details* / *Advanced* folds. The debug log is a drawer behind the yellow **LOG** tab on the
 right edge. It starts closed, shows a red count when new errors arrive, and closes with Esc.
@@ -38,6 +38,18 @@ in the conda `base` env (Convert / Push).
 
 ## Operator features
 
+- **Swapping the capture card**: the camera does not depend on `/dev/elgato` (that udev name
+  only matched one card model). When the camera starts, the UI uses whichever Elgato card is plugged
+  in, any model or serial, and shows it under the Camera light. While the camera is on, unplugging
+  the card stops it, and plugging a card in (the same one or another) starts it again by itself;
+  pressing Start with no card plugged in waits for one. This is skipped while recording, and after
+  you press Stop. Force a device with `FASTUMI_CAPTURE_DEVICE=/dev/videoN`; other vendors go in
+  `CAPTURE_VENDORS` in `settings.py`.
+- **60 fps needs the card on USB 3**: on USB 3 the camera asks the card for uncompressed YUYV
+  (no JPEG decoding, measured 59.95 fps while recording); on USB 2 it falls back to MJPEG, which
+  this card's large JPEG frames limit to ~50 fps. The log line when the camera starts says which
+  (`… USB 3 at /dev/video0, sending YUYV`). Force one with `FASTUMI_PIXEL_FORMAT=yuyv|mjpeg`.
+  Check a recording with `python3 viz/check_fps.py [dataset]`.
 - **GoPro icons in the picture**: the battery / SD-card icons come from the GoPro's HDMI output
   in *Monitor* mode. Set the GoPro's HDMI output to *Live* (clean feed); nothing in software can
   remove them once they are in the picture.
@@ -100,6 +112,22 @@ in the conda `base` env (Convert / Push).
   (remembered in `<dataset>/lerobot_export.json` with the convert settings). The robot-replay outputs of
   `replay_pipeline/make_replay_dataset.sh` (joint angles etc.) appear under Advanced only
   on checkouts that have it (branch `ur7e-dev7.0`).
+- **Robot page (replay on the UR7e)**: plays one episode of a LeRobot *joint-angle* dataset (local
+  `<dataset>/lerobot_joint`, or a Hugging Face repo id) on the arm with `replay/replay_lerobot.py`, in
+  three steps: **1 Dry run** (no robot: joint limits, duration at the chosen speed, a plot), **2 Check
+  robot** (read-only connection: robot mode, safety mode, current joints next to the episode start, to
+  compare with the pendant; never moves the arm) and **3 Run on robot**. The server refuses the run
+  until a dry run and a check of the same episode, speed and IP passed, and the operator ticked that the
+  joints match the pendant and typed RUN (and CONFIRM_FAST above 25%). ■ Stop sends Ctrl+C, which
+  stops the arm (also during the slow move to the start); the e-stop is still the real stop. Several
+  robots with the same IP: connect the NUC only to the one you want (the page explains). The gripper is
+  not replayed. The page also has the how-to for making a replayable dataset (below).
+- **Converting for the robot** (Convert → Advanced): *Output type* "Robot replay: joint angles" writes
+  `<dataset>/lerobot_joint` (pushes go to `<user>/<dataset>_joint`). *Calibration file* picks the
+  `config/*.json` it is converted with: the robot base position / orientation and home pose for that
+  task. A task recorded with the base somewhere else gets its own copy,
+  `config/calib_<dataset>.json`, which is picked by itself when it exists. Episodes with unreachable
+  poses (`VIOLATIONS` in stage 1) are listed as problems.
 - **Top-bar lights**: green = on (machines, recorder, viewer), amber = working (sync, convert,
   push), red = problem. A finished sync / convert / push goes back to off; its page shows the
   result.
@@ -119,6 +147,7 @@ from a script in this repo) or `[GUESS]`.
 | 5 Synchronize | `convert_episodes.py --task <dataset> --parallel N [--keep-raw]` | running / exited 0 |
 | 6 Convert | `webui/convert_to_lerobot.py --src <dataset> --out <dataset>/lerobot` (base env, + push) | running / exited 0 |
 | Push | `push_dataset_to_hub.py --repo-id <user/name> --root <folder> [--public]` (base env) | running / exited 0 |
+| Robot | `replay/replay_lerobot.py <dataset> --episode N --speed S [--check \| --execute --yes] --robot-ip IP` (FastUMI env; reads the dataset with the base env) | running / exited 0 |
 | 7 Visualize | `visualize_dataset.py --port 8000 --no-browser`, embedded in an iframe | `/api/dataset` answers |
 
 Notes:

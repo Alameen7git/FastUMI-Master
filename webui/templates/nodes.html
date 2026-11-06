@@ -24,6 +24,7 @@
       <div class="state-word">Off</div>
       <div class="what">{{ what }}</div>
       <div class="problem"></div>
+      {% if key == 'gopro' %}<div class="small muted" id="card-info"></div>{% endif %}
       <div class="mini">
         {% if key == 'collection' %}
         <a class="btn small primary" href="/collect#collect">Go to Record</a>
@@ -108,8 +109,14 @@ document.addEventListener('fui:status', e => {
       : (job.exit_code !== null ? `last exit code ${job.exit_code}` : '');
   }
 
+  const cc = s.capture_card;
+  document.getElementById('card-info').textContent = cc.card
+    ? `Capture card: ${cc.card.name} (${cc.card.dev})` : 'No capture card plugged in';
+
   const broken = nodes.find(k => j[k].state === 'failed');
-  if (broken) {
+  if (cc.waiting) {
+    instruct('', 'Plug in the capture card: the camera starts by itself once it is plugged in.');
+  } else if (broken) {
     instruct('bad', `${NAMES[broken]} has a problem: ${j[broken].reason}. Check it, then press RESTART on it.`);
   } else if (nodes.every(k => j[k].state === 'running')) {
     instruct('good', 'All machines are ready (3 green lights).', {href: '/collect#collect', label: 'Next: Record →'});

@@ -75,7 +75,7 @@ h3 { font-size: 16px; }
 /* ── header ─────────────────────────────────────────────────────────────── */
 /* Scrolls away with the page (not sticky); hidden while a recording session runs. */
 header { position: relative; z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
-.topbar { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 12px var(--margin); }
+.topbar { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px var(--margin); }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
 /* EGI logo (static/egi-logo.svg) drawn in the text colour, so it follows light / dark */
 .brand .logo {
@@ -87,7 +87,7 @@ header { position: relative; z-index: 20; background: var(--panel); border-botto
 
 .steps { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; padding: 4px; background: var(--well); border: 1px solid var(--line); border-radius: 10px; }
 .steps a {
-  display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 7px;
+  display: flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: 7px;
   text-decoration: none; color: var(--muted); font-weight: 550; font-size: 14px;
 }
 .steps a:hover { color: var(--text); background: var(--panel); }
@@ -433,3 +433,27 @@ body.recording header { display: none; }
 .home-chip.bad, .home-chip.jump { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
 .home-chip.jump { animation: pulse 1.2s ease-in-out infinite; }
 .home-panel .readout .v.small-v, #h-jumps { font-size: 18px; }
+
+/* ── Robot page (replay) ────────────────────────────────────────────────── */
+.replay-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--gap); }
+.replay-steps .panel { margin-bottom: 0; }
+.replay-steps + .panel { margin-top: var(--gap); }
+.rstep { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.rstep h3 { margin: 0; }
+.rstep p { margin: 0; }
+.rstep .rnum {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+}
+.rstep.passed .rnum { background: var(--ok); color: #fff; }
+.rstep.locked { opacity: .55; }
+.rresult { min-height: 1.4em; }
+.rresult .ok { color: var(--ok); font-weight: 600; }
+.rresult .bad { color: var(--bad); font-weight: 600; }
+.rresult table.keys td, .rresult table.keys th { padding: 4px 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+ol.howto { padding-left: 22px; display: flex; flex-direction: column; gap: 12px; line-height: 1.5; }
+ol.howto ul { margin: 6px 0; padding-left: 20px; }
+ol.howto .cmd { margin: 6px 0; }
+.src-Replay { color: #ffa07a; }
+/* Eight steps in the top bar: below this width the theme toggle shows only its icon (it has an aria-label). */
+@media (max-width: 1400px) { .theme-toggle .tl { display: none; } }

@@ -684,6 +684,19 @@ const vValid = attachNameValidation($('v-task'), $('v-name-msg'), () => {
 }, 'Dataset name');
 $('v-push').addEventListener('change', () => { $('v-push-fields').hidden = !$('v-push').checked; updateAll(FUI.status); });
 $('v-space').addEventListener('change', () => updateAll(FUI.status));
+// Calibration file for the robot-replay outputs: config/calib_<dataset>.json is
+// picked by itself when it exists, until the operator chooses one.
+let configPicked = false;
+if ($('v-config')) $('v-config').addEventListener('change', () => { configPicked = true; });
+function updateConfigPicker(task) {
+  if (!$('v-config')) return;
+  const replay = $('v-space').value !== 'pose';
+  $('v-config-box').hidden = !replay;
+  $('v-replay-note').hidden = !replay;
+  if (configPicked) return;
+  const own = [...$('v-config').options].find(o => o.value === `calib_${task}.json`);
+  $('v-config').value = own ? own.value : $('v-config').options[0].value;
+}
 
 function copyWords(info) {
   return info.lerobot.length ? ' Already converted: ' + info.lerobot.map(l => l.name).join(', ') + '.' : '';
@@ -694,6 +707,7 @@ function updateConvertForm(s) {
   const push = $('v-push').checked, repo = hubName(task);
   $('v-info').textContent = info ? `${info.synced} synced episode(s).` + copyWords(info) : '';
   $('v-repo').textContent = repo || 'type the dataset name first';
+  updateConfigPicker(task);
   let reason = '';
   if (!s) reason = 'Connecting…';
   else if (s.jobs.convert.alive) reason = 'Convert is running.';
@@ -721,6 +735,7 @@ async function startConvert(overwrite) {
   const res = await api('/api/convert/start', {
     task: $('v-task').value, space: $('v-space').value, fps: $('v-fps').value,
     episodes: $('v-episodes').value, with_video: $('v-video').checked, overwrite, push,
+    config: $('v-config') ? $('v-config').value : null,
   });
   if (res.ok) return;
   if (res.exists && !overwrite) {

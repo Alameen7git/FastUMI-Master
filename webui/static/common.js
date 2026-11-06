@@ -6,7 +6,7 @@ const FUI = {
   status: null,
   logs: {},            // source -> [{seq,t,src,line}], capped per source
   PER_SOURCE: 2000,
-  SOURCES: ['ROS', 'T265', 'Home', 'GoPro', 'Collection', 'Preview', 'Sync', 'Convert', 'Push', 'Viz', 'UI'],
+  SOURCES: ['ROS', 'T265', 'Home', 'GoPro', 'Collection', 'Preview', 'Sync', 'Convert', 'Push', 'Replay', 'Viz', 'UI'],
 };
 
 async function api(path, body) {
@@ -55,6 +55,7 @@ function worstState(states) {
 function currentStep() {
   if (location.pathname === '/visualize') return 'viz';
   if (location.pathname === '/delete') return 'delete';
+  if (location.pathname === '/replay') return 'replay';
   if (location.pathname === '/collect') return (location.hash || '#collect').slice(1);
   return 'machines';
 }
@@ -77,7 +78,7 @@ function renderSteps(s) {
     const st = {
       machines: worstState(['ros', 't265', 'gopro'].map(k => j[k].state)),
       collect: stepState(j.collection), sync: stepState(j.sync, true), convert: stepState(j.convert, true),
-      push: stepState(j.push, true), viz: stepState(j.viz),
+      push: stepState(j.push, true), viz: stepState(j.viz), replay: stepState(j.replay, true),
       delete: j.convert.meta.auto ? stepState(j.convert, true) : (s.updates_pending.length ? 'starting' : 'stopped'),
     }[a.dataset.step];
     setState(a, st);

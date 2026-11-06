@@ -300,7 +300,22 @@
           <label class="field">Only these episodes (e.g. 1,2,5)
             <input type="text" id="v-episodes" placeholder="all">
           </label>
+          {% if S.REPLAY_SCRIPT %}
+          <label class="field" id="v-config-box" hidden>Calibration file (robot base position)
+            <select id="v-config">
+              {% for c in configs %}<option value="{{ c }}">{{ c }}{% if c == S.DEFAULT_CONFIG %} (default){% endif %}</option>{% endfor %}
+            </select>
+          </label>
+          {% endif %}
         </div>
+        {% if S.REPLAY_SCRIPT %}
+        <div class="small muted" id="v-replay-note" hidden>Robot replay: the joint angles depend on where the robot base
+          was for this task, from the calibration file (<code>config/*.json</code>). If the base was moved, copy
+          <code>config.json</code> to <code>config/calib_&lt;dataset&gt;.json</code>, change <code>base_position</code>,
+          <code>base_orientation</code> and <code>rest_joints_deg</code>, reload, and pick it here. Joint angles go to
+          <code>&lt;dataset&gt;/lerobot_joint</code>; play them on the <a href="/replay">Robot</a> page, which has the
+          full how-to.</div>
+        {% endif %}
         <label class="check"><input type="checkbox" id="v-video" checked> Include the camera video (untick for a small pose-only dataset)</label>
         <div class="cmd">{{ S.CONVERT_SCRIPT }} --src &lt;dataset&gt; --out &lt;dataset&gt;/{{ S.LEROBOT_SUBDIR }} --fps N [--episodes …] [--no-video]<br>
           State and action: T265 pose x, y, z, qx, qy, qz, qw. Video: {{ S.CONVERT_IMAGE_SIZE[0] }}×{{ S.CONVERT_IMAGE_SIZE[1] }}, H.264.<br>

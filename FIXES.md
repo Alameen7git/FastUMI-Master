@@ -129,6 +129,9 @@ Output is LeRobot v3.0, 20 fps, `action` = 6 UR7e joints (rad) + gripper (1 = op
   `ur7e-dev6.1`, identical to embodied_ai_ml v1.4.8; external checkout only as fallback);
   ArUco `DetectorParameters` works on both old and new OpenCV.
 - Live T265 home check in the web UI; YUYV camera format (true 60 fps → 20 fps synced).
+- `viz/check_aruco_live.py`: live check of the gripper tags on the capture card (same detector,
+  dictionary and ids as the conversion). It shows which tags are found, the tag distance mapped to
+  the gripper value, and the both-tags rate. Stop the web UI camera first; press `q` in the window to quit.
 
 ## Open items
 

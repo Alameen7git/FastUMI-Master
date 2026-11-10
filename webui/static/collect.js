@@ -275,13 +275,22 @@ $('c-savefinish').onclick = () => {
 };
 
 const KEYMAP = {' ': 'space', r: 'r', R: 'r', e: 'e', E: 'e', c: 'c', C: 'c'};
+// 5-key USB keypad (SayoDevice 5K2U) sends the digits 1-5. Unlike Space these
+// are one-way, so a double press can't undo itself: 5 / 4 only START a take
+// (ignored while recording), 1 / 2 only STOP + save it (ignored otherwise). 3 is unused.
+const PAD_START = new Set(['5', '4']), PAD_STOP = new Set(['1', '2']);
 function keyTarget(ev) {
   const t = ev.target.tagName;
   return !(t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA');
 }
 document.addEventListener('keydown', ev => {
   const s = FUI.status;
-  const k = KEYMAP[ev.key];
+  let k = KEYMAP[ev.key];
+  if (PAD_START.has(ev.key) || PAD_STOP.has(ev.key)) {
+    const phase = ((s && s.jobs.collection.progress) || {}).phase;
+    if (PAD_START.has(ev.key) ? phase === 'ready' : phase === 'recording') k = 'space';
+    else if (s && s.jobs.collection.alive && keyTarget(ev)) { ev.preventDefault(); return; }
+  }
   if (!k || !s || !s.jobs.collection.alive || !keyTarget(ev) || ev.repeat) return;
   if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
   if ((location.hash || '#collect') !== '#collect') return;

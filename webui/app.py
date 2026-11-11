@@ -1117,12 +1117,24 @@ def api_validate_name():
     return jsonify({'problem': validate_name(request.args.get('name', ''))})
 
 
+def take_running():
+    """A take is being recorded right now (not between takes, not paused)."""
+    job = JOBS['collection']
+    return job.alive() and job.progress.get('phase') == 'recording'
+
+
+TAKE_RUNNING = 'A take is being recorded. Press ■ Stop take or Redo take first, then {}.'
+
+
 @app.route('/api/node/<key>/<action>', methods=['POST'])
 def api_node(key, action):
     if key not in NODE_ORDER:
         return bad('unknown node {}'.format(key), 404)
     if sequence_lock.locked():
         return bad('A Start/Stop All sequence is in progress.')
+    # A machine that already stopped working may always be restarted.
+    if action in ('stop', 'restart') and take_running() and is_green(key):
+        return bad(TAKE_RUNNING.format('{} {}'.format(action, JOBS[key].tag)))
     job = JOBS[key]
     if action == 'start':
         good, why = start_node(key)
@@ -1152,6 +1164,8 @@ def api_nodes(action):
     fn = {'start_all': start_all, 'stop_all': stop_nodes, 'restart_all': restart_all}.get(action)
     if fn is None:
         return bad('unknown action', 404)
+    if action != 'start_all' and take_running():
+        return bad(TAKE_RUNNING.format(action.replace('_all', ' all machines')))
     background(fn)
     return ok()
 

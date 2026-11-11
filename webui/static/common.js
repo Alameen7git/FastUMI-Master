@@ -93,8 +93,6 @@ async function pollStatus() {
     FUI.status = s;
     renderSteps(s);
     renderSessionBanner(s.session);
-    // The header (logo + steps) is not needed while recording: hide it.
-    document.body.classList.toggle('recording', !!s.jobs.collection.alive);
     document.dispatchEvent(new CustomEvent('fui:status', {detail: s}));
   }
   setTimeout(pollStatus, 1000);

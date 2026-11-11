@@ -322,6 +322,34 @@ $('c-next').onclick = async () => {
 };
 document.addEventListener('fui:record-more', () => { $('c-more').click(); goStep('#collect'); showSub('record'); });
 
+// The machines during a session: restart one between takes (T265 drift, a
+// stuck camera) without leaving the page. Not during a take: the server refuses
+// that too, unless the machine already stopped working.
+const RESTART_ASK = {
+  t265: 'Restart the T265?\n\nPut the UMI in the home holder first: the T265 sets home where it starts.',
+  ros: 'Restart ROS?\n\nThe recorder usually cannot reconnect to a new ROS. Better: ■ Finish the session, then ' +
+       'restart from Machines. Restart anyway?',
+  gopro: 'Restart the camera?',
+};
+function renderNodeStrip(s, phase) {
+  const strip = $('c-nodes');
+  strip.innerHTML = '';
+  const inTake = phase === 'recording';
+  for (const k of ['ros', 't265', 'gopro']) {
+    const st = s.jobs[k].state;
+    const btn = el('button', {type: 'button', class: 'small', text: '↻ Restart'});
+    btn.disabled = st === 'starting' || st === 'stopping' || s.sequence_busy || (inTake && st === 'running');
+    btn.title = inTake ? 'Stop or redo the take first' : `Stop and start ${NODE_NAME[k]} again`;
+    btn.onclick = async () => {
+      if (!confirm(RESTART_ASK[k])) return;
+      const r = await api(`/api/node/${k}/restart`, {});
+      if (!r.ok) alert(r.error);
+    };
+    strip.append(el('div', {class: 'node-chip st-' + st}, el('span', {class: 'led'}),
+      el('strong', {text: NODE_NAME[k]}), el('span', {class: 'state-word', text: STATE_LABEL[st]}), btn));
+  }
+}
+
 function renderProblem(s, phase) {
   const pr = s.collect_problem;
   const box = $('c-problem');
@@ -384,6 +412,7 @@ function renderCollection(s) {
   $('c-statusline').textContent = alive && phase === 'recording' ? job.status_line : '';
 
   const problem = alive && renderProblem(s, phase);
+  renderNodeStrip(s, phase);
   const recording = phase === 'recording';
   $('c-keypad').hidden = phase === 'paused';
   $('k-space').disabled = !alive || phase === 'saving' || phase === 'starting' || (problem && !recording);

@@ -73,7 +73,7 @@ h3 { font-size: 16px; }
 .eyebrow { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 
 /* ── header ─────────────────────────────────────────────────────────────── */
-/* Scrolls away with the page (not sticky); hidden while a recording session runs. */
+/* Scrolls away with the page (not sticky). */
 header { position: relative; z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
 .topbar { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px var(--margin); }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
@@ -324,6 +324,10 @@ body.log-open #console { transform: translateX(0); visibility: visible; }
 .problem-nodes { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .problem-node { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; background: var(--panel); border-radius: 8px; border: 1px solid var(--line); }
 .problem-node .full { flex-basis: 100%; }
+/* Record: the machines during a session */
+.node-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.node-chip { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; background: var(--panel); border-radius: 8px; border: 1px solid var(--line); }
+#c-nodes-hint { margin: 6px 0 4px; }
 
 /* ── Record: live camera dropdown ──────────────────────────────────────── */
 details.camera { padding: 0; }
@@ -406,7 +410,6 @@ details.camera[open] > summary::after { content: "▴"; }
 .end-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .end-actions button { flex: 1 1 auto; }
 
-body.recording header { display: none; }
 
 /* Record: task picker — the list, or tick the box to type a name */
 .task-pick { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

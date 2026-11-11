@@ -202,9 +202,11 @@ function nameProblem(raw, what = 'Task name') {
 }
 
 // Wires an <input> to a message box. Returns () => true when the name is valid.
-function attachNameValidation(input, box, onChange, what) {
+// skip(value) true: not a dataset name (e.g. a Hugging Face repo id), no check.
+function attachNameValidation(input, box, onChange, what, skip) {
+  const problem = () => skip && skip(input.value) ? null : nameProblem(input.value, what);
   function render(notify) {
-    const p = nameProblem(input.value, what);
+    const p = problem();
     box.innerHTML = '';
     input.classList.toggle('invalid', !!p && input.value !== '');
     if (p && input.value !== '') {
@@ -224,7 +226,7 @@ function attachNameValidation(input, box, onChange, what) {
   }
   input.addEventListener('input', render);
   render(false);  // caller may not have stored the returned validator yet
-  return () => nameProblem(input.value, what) === null;
+  return () => problem() === null;
 }
 
 // After a recording, the dataset it made is typed in for the operator (once per

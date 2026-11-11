@@ -76,6 +76,11 @@ in the conda `base` env (Convert / Push).
   (passed to it with postMessage), but not while typing in a box. A short label shows what happened.
 - **T265 graph** (View page): two panels on a time axis in seconds: position X/Y/Z in metres (T265
   odometry frame, from where the camera started) and orientation as a quaternion qx/qy/qz/qw (no unit).
+- **Hugging Face datasets** (View page): type `user/name` and press ⤓ Download & view.
+  `viz/fetch_lerobot.py` (conda base env) downloads the LeRobot v3 dataset and cuts each episode's
+  video and values into `<data_dir>/.viz_cache/hf/<user>__<name>/`; the viewer lists it by its repo
+  id, next to the local datasets. Joint-angle datasets are drawn as joints (rad) + gripper. A private
+  dataset needs this NUC to be logged in to Hugging Face. ⤓ Download again picks up a newer version.
 - **Ending a session early**: ■ Finish (or E) asks first. During a take it offers *Save episode N
   & end*, *Don't save it & end* (sends X to `data_collection.py`, which throws the take away) or
   *Keep recording*; between takes it only confirms. Episodes already saved are always kept.

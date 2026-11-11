@@ -16,6 +16,7 @@ core), so frames are read in blocks by a pool of worker processes and piped
 straight into ffmpeg.
 """
 import argparse
+import glob
 import json
 import os
 import shutil
@@ -50,9 +51,30 @@ _pool = None            # worker pool, created in main()
 _encode_lock = threading.Lock()   # one encode at a time: each already uses every core
 
 
+# Hugging Face / LeRobot datasets, made ready by fetch_lerobot.py (the web UI runs
+# it). Their name in the viewer is the repo id (user/name): a task folder name
+# never has a '/'.
+HF_DIR = os.path.join(CACHE_DIR, 'hf')
+
+
+def hf_datasets():
+    """{repo id: its dataset.json, + 'dir'} for every dataset fetch_lerobot.py prepared."""
+    out = {}
+    for path in sorted(glob.glob(os.path.join(HF_DIR, '*', 'dataset.json'))):
+        try:
+            with open(path) as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            continue
+        d['dir'] = os.path.dirname(path)
+        out[d['repo']] = d
+    return out
+
+
 def scan_dataset():
     """{task_name: [episode_index, ...]} for every task dir under DATA_DIR that
-    has at least one processed episode_<n>.hdf5 file."""
+    has at least one processed episode_<n>.hdf5 file, then the prepared
+    Hugging Face datasets."""
     result = {}
     if not os.path.isdir(DATA_DIR):
         return result
@@ -69,10 +91,24 @@ def scan_dataset():
                     continue
         if indices:
             result[task] = sorted(indices)
+    for repo, d in hf_datasets().items():
+        result[repo] = d['episodes']
     return result
 
 
+def load_hf_episode(d, episode):
+    path = os.path.join(d['dir'], f'episode_{episode}.json')
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'no episode {episode} in {d["repo"]}')
+    with open(path) as f:
+        ep = json.load(f)
+    return d['cameras'], np.array(ep['qpos']), np.array(ep['action']), len(ep['qpos']), path
+
+
 def load_episode_arrays(task, episode):
+    hf = hf_datasets().get(task)
+    if hf:
+        return load_hf_episode(hf, episode)
     hdf5_path = os.path.join(DATA_DIR, task, f'episode_{episode}.hdf5')
     if not os.path.isfile(hdf5_path):
         raise FileNotFoundError(f'no such episode file: {hdf5_path}')
@@ -103,7 +139,14 @@ def _read_block(args):
 
 def render_video(task, episode):
     """Encode (and cache) this episode's camera frames to an H.264 mp4 so the
-    browser <video> tag can play/seek it natively."""
+    browser <video> tag can play/seek it natively. A Hugging Face dataset's
+    clips were already cut by fetch_lerobot.py."""
+    hf = hf_datasets().get(task)
+    if hf:
+        path = os.path.join(hf['dir'], f'episode_{episode}.mp4')
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'no camera video for episode {episode} of {task}')
+        return path
     cache_path = os.path.join(CACHE_DIR, task, f'episode_{episode}.mp4')
     hdf5_path = os.path.join(DATA_DIR, task, f'episode_{episode}.hdf5')
     if not os.path.isfile(hdf5_path):
@@ -301,13 +344,20 @@ async function loadEpisode() {
   try {
     const data = await fetchJSON(`/api/episode?task=${encodeURIComponent(task)}&episode=${episode}`);
     qpos = data.qpos;
+    labels = data.labels || labels;
     nFrames = data.n_frames;
     fps = data.fps;
-    metaEl.textContent = `cameras: ${data.cam_names.join(', ')}   frames: ${nFrames}   fps: ${fps.toFixed(1)}`;
+    const cams = data.cam_names.length ? data.cam_names.join(', ') : 'none (plots only)';
+    metaEl.textContent = `cameras: ${cams}   frames: ${nFrames}   fps: ${fps.toFixed(1)}`;
 
-    player.src = `/video/${encodeURIComponent(task)}/episode_${episode}.mp4`;
-    player.load();
-    prefetchNext(task);
+    player.hidden = !data.cam_names.length;
+    if (data.cam_names.length) {
+      player.src = `/video/${encodeURIComponent(task)}/episode_${episode}.mp4`;
+      player.load();
+      prefetchNext(task);
+    } else {
+      player.removeAttribute('src');
+    }
     drawPlot(0);
   } catch (e) {
     showError('Failed to load episode: ' + e.message);
@@ -389,8 +439,14 @@ function drawPlot(cursorFrac) {
   ctx.clearRect(0, 0, W, H);
   if (!qpos || qpos.length === 0) return;
   const n = qpos.length, dims = qpos[0].length;
-  const panels = dims === 7 ? PANELS
-    : [{title: 'Values', unit: 'no unit', dims: [...Array(dims).keys()], colors: PANELS[0].colors.concat(PANELS[1].colors)}];
+  const pose = dims === 7 && String(labels[0]).toLowerCase() === 'x';
+  // Robot joint datasets (6 joints + gripper, from Convert's robot-replay output)
+  const joints = dims === 7 && /joint/i.test(String(labels[0]));
+  const panels = pose ? PANELS
+    : joints ? [{title: 'Joints', unit: 'rad', dims: [0, 1, 2, 3, 4, 5], colors: COLORS.slice(0, 6)},
+                {title: 'Gripper', unit: 'no unit', dims: [6], colors: [COLORS[6]]}]
+    : [{title: 'Values', unit: 'no unit', dims: [...Array(dims).keys()],
+        colors: [...Array(dims).keys()].map(i => COLORS[i % COLORS.length])}];
   const top0 = 30, bottom = H - 44, gap = 44;
   const h = (bottom - top0 - gap * (panels.length - 1)) / panels.length;
   panels.forEach((p, k) => drawPanel(p, top0 + k * (h + gap), h, W, n));
@@ -626,9 +682,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self._error(404, str(e))
                 except ValueError as e:
                     return self._error(422, str(e))
+                hf = hf_datasets().get(task)
                 self._json({
                     'task': task, 'episode': episode, 'cam_names': cam_names,
-                    'n_frames': n_frames, 'fps': PLAYBACK_FPS,
+                    'n_frames': n_frames, 'fps': hf['fps'] if hf else PLAYBACK_FPS,
+                    'labels': hf['labels'] if hf else QPOS_LABELS,
                     'qpos': qpos.tolist(), 'action': action.tolist(),
                 })
 

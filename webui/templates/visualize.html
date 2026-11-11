@@ -8,11 +8,12 @@
     <h2 class="grow" style="margin:0">View a dataset</h2>
     <span class="state-word" id="viz-state">Off</span>
   </div>
-  <p class="muted" style="margin-top:0">Type the dataset name, then press VIEW to watch the video with the motion data.</p>
+  <p class="muted" style="margin-top:0">Type the dataset name, then press VIEW to watch the video with the motion data.
+    For a dataset on Hugging Face, type it as <code>user/name</code>: it is downloaded first.</p>
   <form id="viz-form" autocomplete="off">
     <div class="form-grid" style="grid-template-columns:1fr">
-      <label class="field">Dataset name
-        <input type="text" id="viz-task" placeholder="Type the dataset name" autocomplete="off">
+      <label class="field">Dataset name, or Hugging Face user/name
+        <input type="text" id="viz-task" placeholder="e.g. PnP_block11 or Nityavedula/UMI_2026-11-05_T0_a1" autocomplete="off">
       </label>
     </div>
     <div id="viz-name-msg"></div>
@@ -20,6 +21,7 @@
   </form>
   <div class="row" style="margin-top:18px">
     <button class="go huge" id="viz-start">▶ View</button>
+    <button class="big" id="viz-fetch" type="button" hidden>⤓ Download again</button>
     <button class="stop big" id="viz-stop" disabled>■ Close viewer</button>
     <a class="btn big" id="viz-open" href="#" target="_blank" rel="noopener" hidden>Open in new tab ↗</a>
     <span class="inline-reason" id="viz-reason" hidden></span>
@@ -29,7 +31,10 @@
     <summary>Details</summary>
     <div class="inner">
       <div class="cmd">{{ S.VIZ_SCRIPT or 'visualize_dataset.py (not found)' }} --port {{ S.VIZ_PORT }} --no-browser</div>
-      <div class="small muted">The viewer plays the synced <code>episode_N.hdf5</code> files made by Sync (not LeRobot folders). Data folder: <code>{{ S.DATA_DIR }}</code></div>
+      <div class="small muted">The viewer plays the synced <code>episode_N.hdf5</code> files made by Sync. Data folder: <code>{{ S.DATA_DIR }}</code></div>
+      <div class="small muted">A Hugging Face dataset (LeRobot v3) is downloaded and cut into episodes by
+        <code>{{ S.VIZ_FETCH_SCRIPT or 'viz/fetch_lerobot.py' }}</code> (conda base env) into
+        <code>{{ S.VIZ_HF_DIR }}</code>. ⤓ Download again picks up a newer version on the Hub.</div>
       <div class="small muted" id="viz-detail"></div>
     </div>
   </details>

@@ -390,6 +390,23 @@ PREP_TOTAL_RE = re.compile(r'Preparing (\d+) episode video')
 PREP_EP_RE = re.compile(r'^\[(\d+)/(\d+)\] episode_')
 
 
+FETCH_EP_RE = re.compile(r'^\[(\d+)/(\d+)\] episode_\d+ ready')
+
+
+def vizfetch_line(job, line):
+    """fetch_lerobot.py: download, then one line per episode made ready."""
+    p = job.progress
+    if line.startswith('Downloading'):
+        p.update(stage='Downloading from Hugging Face', step='downloading…')
+    m = FETCH_EP_RE.search(line)
+    if m:
+        done, total = int(m.group(1)), int(m.group(2))
+        p.update(stage='Preparing episodes', done=done, total=total, percent=round(100.0 * done / total),
+                 step='{}/{} episodes'.format(done, total))
+    if any(h in line for h in ERROR_HINTS):
+        job.errors.append(line.strip())
+
+
 def vizprep_line(job, line):
     p = job.progress
     m = PREP_TOTAL_RE.search(line)
@@ -475,6 +492,7 @@ JOBS = {
                 on_exit=lambda j: j.state == 'done' and prepare_videos(j.meta.get('task'))),
     'vizprep': Job('vizprep', 'Viz', hub, registry, kind='batch', on_line=lambda j, l: vizprep_line(j, l),
                    on_exit=lambda j: start_next_prep()),
+    'vizfetch': Job('vizfetch', 'Viz', hub, registry, kind='batch', on_line=vizfetch_line),
     'convert': Job('convert', 'Convert', hub, registry, kind='batch', on_line=convert_line,
                    on_exit=lambda j: remember_push(j)),
     'viz': Job('viz', 'Viz', hub, registry,
@@ -703,7 +721,7 @@ def shutdown_everything():
         _shutdown_done.wait()     # another caller is already stopping everything
         return
     hub.add('UI', '=== Shutting down FastUMI UI ===')
-    side = [threading.Thread(target=JOBS[k].stop) for k in ('sync', 'convert', 'viz', 'push', 'vizprep')]
+    side = [threading.Thread(target=JOBS[k].stop) for k in ('sync', 'convert', 'viz', 'push', 'vizprep', 'vizfetch')]
     for t in side:
         t.start()
     stop_nodes()
@@ -1394,7 +1412,11 @@ def api_viz(action):
     if S.VIZ_SCRIPT is None:
         return bad('visualize_dataset.py not found in this checkout.')
     body = request.get_json(force=True, silent=True) or {}
-    if body.get('task') is not None:   # operator-typed dataset name
+    task = body.get('task')
+    if task is not None and HUB_REPO_RE.match(task):   # a Hugging Face dataset
+        if task not in hf_viewable():
+            return bad('"{}" is not downloaded yet. Press ⤓ Download & view.'.format(task))
+    elif task is not None:   # operator-typed dataset name
         _, err = _task_from_body(body, 'synced')
         if err:
             return err
@@ -1405,6 +1427,49 @@ def api_viz(action):
                    'outside this UI?). Stop it or change VIZ_PORT in webui/settings.py.'.format(S.VIZ_PORT))
     cmd = S.FASTUMI_PREFIX + 'exec python3 -u {} --port {} --no-browser'.format(S.VIZ_SCRIPT, S.VIZ_PORT)
     good, why = job.start(cmd)
+    return ok() if good else bad(why)
+
+
+def hf_view_dir(repo):
+    return os.path.join(S.VIZ_HF_DIR, repo.replace('/', '__'))
+
+
+def hf_viewable():
+    """{repo id: episode count} of the Hugging Face datasets ready for the viewer."""
+    out = {}
+    for path in glob.glob(os.path.join(S.VIZ_HF_DIR, '*', 'dataset.json')):
+        try:
+            with open(path) as f:
+                d = json.load(f)
+            out[d['repo']] = len(d['episodes'])
+        except (OSError, ValueError, KeyError):
+            continue
+    return out
+
+
+@app.route('/api/viz/hf')
+def api_viz_hf():
+    return jsonify({'ready': hf_viewable()})
+
+
+@app.route('/api/viz/fetch', methods=['POST'])
+def api_viz_fetch():
+    """Download a Hugging Face dataset and cut it into viewer episodes (fetch_lerobot.py)."""
+    job = JOBS['vizfetch']
+    body = request.get_json(force=True, silent=True) or {}
+    if body.get('stop'):
+        background(job.stop)
+        return ok()
+    repo = (body.get('repo') or '').strip()
+    if not HUB_REPO_RE.match(repo):
+        return bad('Type a Hugging Face dataset as user/name, e.g. Nityavedula/UMI_2026-11-05_T0_a1.')
+    if S.VIZ_FETCH_SCRIPT is None:
+        return bad('viz/fetch_lerobot.py not found in this checkout.')
+    if job.alive():
+        return bad('A download is already running ({}).'.format(job.meta.get('repo')))
+    cmd = 'exec {} -u {} {} --out {}'.format(S.LEROBOT_PY, shlex.quote(S.VIZ_FETCH_SCRIPT), shlex.quote(repo),
+                                             shlex.quote(hf_view_dir(repo)))
+    good, why = job.start(cmd, meta={'repo': repo})
     return ok() if good else bad(why)
 
 

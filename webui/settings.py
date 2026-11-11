@@ -185,10 +185,15 @@ REPLAY_OUT_DIR = os.path.join(REPO_ROOT, 'outputs', 'replay')   # dry-run plots
 
 # ── Step 7: visualize ─────────────────────────────────────────────────────────
 # [CONFIRMED] visualize_dataset.py argparse: --port (default 8000), --no-browser.
-# It browses every <data_dir>/<task>/episode_N.hdf5 (the step-5 output); it
-# cannot read LeRobot folders.
+# It browses every <data_dir>/<task>/episode_N.hdf5 (the step-5 output), and the
+# Hugging Face datasets made ready for it by viz/fetch_lerobot.py.
 VIZ_SCRIPT = _first_existing('viz/visualize_dataset.py', 'visualize_dataset.py')
 VIZ_PORT = 8000
+# A Hugging Face LeRobot v3 dataset (user/name) is first downloaded and cut into
+# per-episode values + video clips by fetch_lerobot.py, in the conda base env
+# (LEROBOT_PY: huggingface_hub, pyarrow), into VIZ_HF_DIR/<user>__<name>/.
+VIZ_FETCH_SCRIPT = _first_existing('viz/fetch_lerobot.py')
+VIZ_HF_DIR = os.path.join(DATA_DIR, '.viz_cache', 'hf')
 # After each Sync, encode that dataset's viewer videos in the background
 # (visualize_dataset.py --prepare, niced) so View opens episodes instantly.
 # Paused while recording so it can't take CPU from the recorder.

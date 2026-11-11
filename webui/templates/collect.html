@@ -380,8 +380,8 @@
   <div class="small muted" id="p-hf-login">Checking Hugging Face login…</div>
   <form id="push-form" autocomplete="off" style="margin-top:14px">
     <div class="form-grid" style="grid-template-columns:1fr">
-      <label class="field">Dataset
-        <input type="text" id="p-dataset" placeholder="Type the dataset name" autocomplete="off">
+      <label class="field">Dataset (for raw recordings also a folder: its full path)
+        <input type="text" id="p-dataset" placeholder="Type the dataset name, or e.g. /media/usb/Insert_the_RAM_stick" autocomplete="off">
       </label>
     </div>
     <div id="p-name-msg"></div>
@@ -397,7 +397,8 @@
     <div class="hub-name" id="p-repo-row" hidden>Uploads to <strong id="p-repo">…</strong></div>
     <label class="check" style="margin-top:12px" id="p-public-row"><input type="checkbox" id="p-public"> Make it public (default: private)</label>
     <div class="small muted" id="p-raw-note" hidden style="margin-top:10px">Raw recordings go to their own repo,
-      <code>&lt;dataset&gt;_raw</code>, next to the LeRobot one. Only <code>raw/</code>, <code>csv/</code>, <code>camera/</code>,
+      <code>&lt;dataset&gt;_raw</code>, next to the LeRobot one. A raw dataset outside the data folder: type its full
+      path (the folder that holds <code>raw/episode_N/</code>); the folder name becomes the Hub name. Only <code>raw/</code>, <code>csv/</code>, <code>camera/</code>,
       <code>states.csv</code> and <code>deleted_episodes.json</code> are uploaded; files already on the Hub are skipped and never
       deleted. To get the synced <code>episode_N.hdf5</code> back on any computer: Sync → Raw data from Hugging Face.</div>
     <div class="row" style="margin-top:18px">

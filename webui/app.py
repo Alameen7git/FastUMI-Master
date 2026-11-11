@@ -2028,6 +2028,8 @@ def check_repo_id(repo_id):
 def remember_push(job):
     """After a successful upload, remember where the dataset went (Delete re-pushes there)."""
     pushed, target, task = job.progress.get('pushed'), job.meta.get('push'), job.meta.get('task')
+    if job.meta.get('dir') and os.path.realpath(job.meta['dir']) != os.path.realpath(os.path.join(S.DATA_DIR, task)):
+        return   # a raw folder outside the data folder: nothing of ours to note it in
     if job.state == 'done' and pushed and target and task and os.path.isdir(os.path.join(S.DATA_DIR, task)):
         rec = dict(target, url=pushed[-1], pushed_at=time.strftime('%Y-%m-%d %H:%M:%S'))
         if job.meta.get('kind') == 'raw':
@@ -2068,12 +2070,43 @@ def api_rawhub():
     return ok(**_rawhub_cache['data'])
 
 
+def raw_folder(path):
+    """A raw dataset folder anywhere on this computer (Push -> Raw recordings, typed as a path):
+    {path, name, raw, gb, in_data_dir} or {error}. The Hub repo is <user>/<folder name>_raw."""
+    d = os.path.realpath(os.path.expanduser((path or '').strip()))
+    if not os.path.isdir(d):
+        return {'error': 'No folder {}'.format(d)}
+    name = os.path.basename(d)
+    eps = glob.glob(os.path.join(d, 'raw', 'episode_*'))
+    if not eps:
+        return {'error': '{} has no raw/episode_N folders (it should hold raw/episode_1/video.mp4, ...).'.format(d)}
+    gb = sum(os.path.getsize(os.path.join(r, f)) for e in eps for r, _, fs in os.walk(e) for f in fs) / 1e9
+    problem = validate_name(name, 'Folder name')
+    out = {'path': d, 'name': name, 'raw': len(eps), 'gb': round(gb, 2),
+           'in_data_dir': os.path.dirname(d) == os.path.realpath(S.DATA_DIR)}
+    if problem:
+        out['error'] = '{} (the folder name becomes the Hub name, {}_raw).'.format(problem['error'], name)
+    return out
+
+
+@app.route('/api/rawfolder')
+def api_rawfolder():
+    return jsonify(raw_folder(request.args.get('path', '')))
+
+
 def start_raw_push(job, body):
     if S.RAW_PUSH_SCRIPT is None:
         return bad('webui/push_raw.py not found in this checkout.')
-    task, err = _task_from_body(body, 'raw')
-    if err:
-        return err
+    if (body.get('path') or '').strip():
+        f = raw_folder(body['path'])
+        if f.get('error'):
+            return bad(f['error'])
+        task, folder, n = f['name'], f['path'], f['raw']
+    else:
+        task, err = _task_from_body(body, 'raw')
+        if err:
+            return err
+        folder, n = os.path.join(S.DATA_DIR, task), scan_tasks()[task]['raw']
     col = JOBS['collection']
     if col.alive() and col.meta.get('task') == task:
         return bad('"{}" is being recorded right now. Finish the session first.'.format(task))
@@ -2082,9 +2115,8 @@ def start_raw_push(job, body):
         return bad(why)
     cmd = '{} -u {} --repo-id {} --dataset-dir {}{}'.format(
         shlex.quote(S.LEROBOT_PY), shlex.quote(S.RAW_PUSH_SCRIPT), shlex.quote(push['repo_id']),
-        shlex.quote(os.path.join(S.DATA_DIR, task)), ' --public' if push['public'] else '')
-    good, why = job.start(cmd, meta={'task': task, 'kind': 'raw', 'push': push,
-                                     'episodes': scan_tasks()[task]['raw']})
+        shlex.quote(folder), ' --public' if push['public'] else '')
+    good, why = job.start(cmd, meta={'task': task, 'kind': 'raw', 'push': push, 'episodes': n, 'dir': folder})
     return ok() if good else bad(why)
 
 

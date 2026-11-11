@@ -844,15 +844,35 @@ $('conv-form').addEventListener('submit', ev => { ev.preventDefault(); startConv
 $('v-stop').onclick = () => api('/api/convert/stop', {});
 
 // ── Push (a converted dataset) ──────────────────────────────────────────────
-const pValid = attachNameValidation($('p-dataset'), $('p-name-msg'), () => updateAll(FUI.status), 'Dataset name');
+// Raw recordings: a dataset name, or the full path of a raw dataset folder anywhere on this computer.
+const pIsPath = v => /^[\/~]/.test((v || '').trim()) &&
+  (document.querySelector('input[name="p-what"]:checked') || {}).value === 'raw';
+const pValid = attachNameValidation($('p-dataset'), $('p-name-msg'), () => updateAll(FUI.status), 'Dataset name', pIsPath);
+let PFOLDER = null, pFolderTimer = null;   // /api/rawfolder answer for the typed path
+function checkPushFolder() {
+  const v = $('p-dataset').value.trim();
+  if (PFOLDER && PFOLDER.typed === v && pIsPath(v)) return;   // already checked / being checked
+  clearTimeout(pFolderTimer);
+  if (!pIsPath(v)) { PFOLDER = null; return; }
+  PFOLDER = {typed: v, loading: true};
+  pFolderTimer = setTimeout(async () => {
+    const r = await fetch('/api/rawfolder?path=' + encodeURIComponent(v)).then(x => x.json()).catch(() => ({error: 'Could not check the folder.'}));
+    if ($('p-dataset').value.trim() === v) { PFOLDER = Object.assign(r, {typed: v}); updateAll(FUI.status); }
+  }, 400);
+}
+$('p-dataset').addEventListener('input', checkPushFolder);
 
 const pWhat = () => document.querySelector('input[name="p-what"]:checked').value;
-document.querySelectorAll('input[name="p-what"]').forEach(r => r.addEventListener('change', () => updateAll(FUI.status)));
+document.querySelectorAll('input[name="p-what"]').forEach(r => r.addEventListener('change', () => {
+  checkPushFolder();
+  $('p-dataset').dispatchEvent(new Event('input'));   // re-check the name (a path is fine only for raw)
+}));
 // A dataset's raw recordings go to <user>/<dataset>_raw (next to the LeRobot repo <user>/<dataset>).
 const rawSuffix = () => (FUI.status && FUI.status.raw_hub_suffix) || '_raw';
 const rawHubName = task => HF && HF.user && task ? `${HF.user}/${task}${rawSuffix()}` : '';
 
 function updatePushForm(s) {
+  if (pIsPath($('p-dataset').value)) return updatePushFolderForm(s);
   const ds = $('p-dataset').value.trim(), info = TASKS[ds], raw = pWhat() === 'raw';
   const copy = info && (info.lerobot.find(l => l.name === ds + '/lerobot') || info.lerobot.find(l => l.name === ds + '_lerobot'));
   const repo = raw ? rawHubName(ds) : hubName(ds);
@@ -889,10 +909,34 @@ function updatePushForm(s) {
       {name: 'Upload', busy: 'Uploading', button: raw ? 'PUSH RAW TO HUB' : 'PUSH TO HUB', key: 'task'});
   }
 }
+// Raw recordings from a folder anywhere on this computer -> <user>/<folder name>_raw.
+function updatePushFolderForm(s) {
+  const f = PFOLDER || {loading: true};
+  const repo = f.name && !f.error ? rawHubName(f.name) : '';
+  $('p-info').textContent = f.loading ? 'Checking the folder…'
+    : f.raw ? `${f.raw} raw episode(s), ${f.gb} GB in ${f.path}/raw/` : '';
+  $('p-repo-row').hidden = !repo;
+  $('p-repo').textContent = repo;
+  let reason = '';
+  if (!s) reason = 'Connecting…';
+  else if (!s.scripts.push_raw) reason = 'webui/push_raw.py not found.';
+  else if (s.jobs.push.alive) reason = 'An upload is running.';
+  else if (f.loading) reason = 'Checking the folder…';
+  else if (f.error) reason = f.error;
+  else if (!repo) reason = 'Log in to Hugging Face first (see above).';
+  $('p-start').textContent = 'Push raw to Hub';
+  $('p-start').disabled = !!reason;
+  $('p-reason').textContent = reason;
+  $('p-reason').classList.toggle('blocked', !!reason);
+  if (s) batchInstruction('p-instr', s.jobs.push, f.name || '', reason,
+    {name: 'Upload', busy: 'Uploading', button: 'PUSH RAW TO HUB', key: 'task'});
+}
+
 $('push-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   $('p-msg').innerHTML = '';
-  const res = await api('/api/push/start', {task: $('p-dataset').value.trim(), what: pWhat(),
+  const typed = $('p-dataset').value.trim(), path = pIsPath(typed);
+  const res = await api('/api/push/start', {task: path ? '' : typed, path: path ? typed : '', what: pWhat(),
                                              public: $('p-public').checked});
   if (!res.ok) showProblem($('p-msg'), res);
   refreshData();

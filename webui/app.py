@@ -271,6 +271,34 @@ def push_line(job, line):
         p['pushing'] = False
     if job.key == 'push' and _is_error(line):
         job.errors.append(line.strip())
+    if job.meta.get('kind') == 'raw':
+        raw_push_line(job, line)
+
+
+RAW_FOUND_RE = re.compile(r'(\d+) raw episode\(s\), (\d+) files, ([\d.]+) GB')
+RAW_UP_RE = re.compile(r'(\d+)/(\d+) files checked, (\d+)/(\d+) uploaded \(([^)]*) transferred\)')
+
+
+def raw_push_line(job, line):
+    """push_raw.py / hf upload output -> progress of a raw upload."""
+    p = job.progress
+    m = RAW_FOUND_RE.search(line)
+    if m:
+        p.update(stage='Checking the files', percent=0, step='{} episodes, {} GB'.format(m.group(1), m.group(3)))
+    m = RAW_UP_RE.search(line)
+    if m:
+        checked, files, up, todo, sent = m.groups()
+        if checked != files:
+            p.update(stage='Checking the files', step='{}/{} files checked'.format(checked, files))
+        elif int(todo) == 0:
+            p.update(stage='Uploading', percent=100, step='nothing new to upload')
+        else:
+            p.update(stage='Uploading', percent=round(100.0 * int(up) / int(todo)),
+                     step='{}/{} files uploaded, {} sent'.format(up, todo, sent))
+    if 'Checking the files on Hugging Face' in line:
+        p.update(stage='Checking the upload', step='comparing with the Hub')
+    if line.startswith('Verified:'):
+        p['step'] = line.strip()
 
 
 CONV_TOTAL_RE = re.compile(r'Converting (\d+) episode')
@@ -814,6 +842,7 @@ def scan_tasks():
             'synced': len(glob.glob(os.path.join(d, 'episode_*.hdf5'))),
             'lerobot': lerobot,
             'hub': read_export(name).get('hub'),
+            'raw_hub': read_export(name).get('raw_hub'),
         }
     for name in sorted(os.listdir(S.DATA_DIR)):
         d = os.path.join(S.DATA_DIR, name)
@@ -923,7 +952,8 @@ def api_status():
         'updates_pending': sorted(pending_updates),
         'last_recorded': None if JOBS['collection'].alive() else last_recorded(),
         'scripts': {'sync': S.SYNC_SCRIPT, 'convert': S.CONVERT_SCRIPT, 'replay': S.REPLAY_SCRIPT,
-                    'viz': S.VIZ_SCRIPT, 'push': S.PUSH_SCRIPT},
+                    'viz': S.VIZ_SCRIPT, 'push': S.PUSH_SCRIPT, 'push_raw': S.RAW_PUSH_SCRIPT},
+        'raw_hub_name': S.RAW_HUB_NAME,
         'now': time.time(),
         'replay_passed': replay_passed,
         'viz_url': 'http://{}:{}/'.format(request.host.split(':')[0], S.VIZ_PORT),
@@ -1273,7 +1303,7 @@ def _task_from_body(body, need_key):
     if info is None:
         return None, bad('No dataset named "{}" under {}'.format(task, S.DATA_DIR))
     if not info[need_key]:
-        what = {'raw': 'raw episodes (raw/episode_N/) to synchronize',
+        what = {'raw': 'raw episodes (raw/episode_N/)',
                 'synced': 'synced episodes (episode_N.hdf5) — run Sync first'}[need_key]
         return None, bad('"{}" has no {}.'.format(task, what))
     return task, None
@@ -1968,7 +1998,41 @@ def remember_push(job):
     """After a successful upload, remember where the dataset went (Delete re-pushes there)."""
     pushed, target, task = job.progress.get('pushed'), job.meta.get('push'), job.meta.get('task')
     if job.state == 'done' and pushed and target and task and os.path.isdir(os.path.join(S.DATA_DIR, task)):
-        write_export(task, hub=dict(target, url=pushed[-1], pushed_at=time.strftime('%Y-%m-%d %H:%M:%S')))
+        rec = dict(target, url=pushed[-1], pushed_at=time.strftime('%Y-%m-%d %H:%M:%S'))
+        if job.meta.get('kind') == 'raw':
+            write_export(task, raw_hub=dict(rec, episodes=job.meta.get('episodes')))
+        else:
+            write_export(task, hub=rec)
+
+
+def raw_hub_target(public=False):
+    """({repo_id, public}, None): where raw recordings go, <user>/umi_raw; or (None, why)."""
+    user = hf_whoami().get('user')
+    if not user:
+        return None, ('Not logged in to Hugging Face. Run "huggingface-cli login" in a terminal once, '
+                      'then try again.')
+    repo_id = '{}/{}'.format(user, S.RAW_HUB_NAME)
+    return {'repo_id': repo_id, 'public': bool(public)}, check_repo_id(repo_id)
+
+
+def start_raw_push(job, body):
+    if S.RAW_PUSH_SCRIPT is None:
+        return bad('webui/push_raw.py not found in this checkout.')
+    task, err = _task_from_body(body, 'raw')
+    if err:
+        return err
+    col = JOBS['collection']
+    if col.alive() and col.meta.get('task') == task:
+        return bad('"{}" is being recorded right now. Finish the session first.'.format(task))
+    push, why = raw_hub_target(body.get('public'))
+    if why:
+        return bad(why)
+    cmd = '{} -u {} --repo-id {} --dataset-dir {}{}'.format(
+        shlex.quote(S.LEROBOT_PY), shlex.quote(S.RAW_PUSH_SCRIPT), shlex.quote(push['repo_id']),
+        shlex.quote(os.path.join(S.DATA_DIR, task)), ' --public' if push['public'] else '')
+    good, why = job.start(cmd, meta={'task': task, 'kind': 'raw', 'push': push,
+                                     'episodes': scan_tasks()[task]['raw']})
+    return ok() if good else bad(why)
 
 
 @app.route('/api/push/<action>', methods=['POST'])
@@ -1977,9 +2041,11 @@ def api_push(action):
     if action == 'stop':
         background(job.stop)
         return ok()
+    body = request.get_json(force=True, silent=True) or {}
+    if body.get('what') == 'raw':
+        return start_raw_push(job, body)
     if S.PUSH_SCRIPT is None:
         return bad('No push script found.')
-    body = request.get_json(force=True, silent=True) or {}
     task, err = _task_from_body(body, 'synced')
     if err:
         return err

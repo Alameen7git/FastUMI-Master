@@ -355,7 +355,7 @@
 <div class="instruction" id="p-instr"><span class="arrow">PUSH</span><span class="txt">Connecting…</span></div>
 <div class="panel">
   <h2>Push a dataset to Hugging Face Hub</h2>
-  <p class="muted" style="margin-top:0">Upload a dataset that was converted earlier.</p>
+  <p class="muted" style="margin-top:0">Upload the converted LeRobot dataset, or keep a copy of the raw recordings.</p>
   <div class="small muted" id="p-hf-login">Checking Hugging Face login…</div>
   <form id="push-form" autocomplete="off" style="margin-top:14px">
     <div class="form-grid" style="grid-template-columns:1fr">
@@ -364,9 +364,21 @@
       </label>
     </div>
     <div id="p-name-msg"></div>
+    <div class="field" style="margin-top:12px">What to push
+      <div class="ds-choice">
+        <label class="check"><input type="radio" name="p-what" value="lerobot" checked>
+          LeRobot dataset (converted, for training)</label>
+        <label class="check"><input type="radio" name="p-what" value="raw">
+          Raw recordings: the raw/ folder (camera video + T265 CSVs), about 10× smaller than the synced hdf5</label>
+      </div>
+    </div>
     <div class="small muted" id="p-info" style="margin-top:8px"></div>
     <div class="hub-name" id="p-repo-row" hidden>Uploads to <strong id="p-repo">…</strong></div>
-    <label class="check" style="margin-top:12px"><input type="checkbox" id="p-public"> Make it public (default: private)</label>
+    <label class="check" style="margin-top:12px" id="p-public-row"><input type="checkbox" id="p-public"> Make it public (default: private)</label>
+    <div class="small muted" id="p-raw-note" hidden style="margin-top:10px">Raw recordings of every dataset go into one
+      private repo, each dataset in its own folder. Only <code>raw/</code>, <code>csv/</code>, <code>camera/</code>,
+      <code>states.csv</code> and <code>deleted_episodes.json</code> are uploaded; files already on the Hub are skipped and never
+      deleted. To get the synced <code>episode_N.hdf5</code> back later, download the folder into the data folder and run Sync.</div>
     <div class="row" style="margin-top:18px">
       <button class="go huge" id="p-start" type="submit">Push to Hub</button>
       <button class="stop big" id="p-stop" type="button" disabled>■ Stop</button>

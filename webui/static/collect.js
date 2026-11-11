@@ -788,36 +788,54 @@ $('v-stop').onclick = () => api('/api/convert/stop', {});
 // ── Push (a converted dataset) ──────────────────────────────────────────────
 const pValid = attachNameValidation($('p-dataset'), $('p-name-msg'), () => updateAll(FUI.status), 'Dataset name');
 
+const pWhat = () => document.querySelector('input[name="p-what"]:checked').value;
+document.querySelectorAll('input[name="p-what"]').forEach(r => r.addEventListener('change', () => updateAll(FUI.status)));
+// Raw recordings of every dataset go to <user>/umi_raw/<dataset>/.
+const rawHubName = () => HF && HF.user ? `${HF.user}/${FUI.status ? FUI.status.raw_hub_name : 'umi_raw'}` : '';
+
 function updatePushForm(s) {
-  const ds = $('p-dataset').value.trim(), info = TASKS[ds];
+  const ds = $('p-dataset').value.trim(), info = TASKS[ds], raw = pWhat() === 'raw';
   const copy = info && (info.lerobot.find(l => l.name === ds + '/lerobot') || info.lerobot.find(l => l.name === ds + '_lerobot'));
-  const repo = hubName(ds);
-  $('p-info').textContent = copy
-    ? `${copy.episodes ?? '?'} episode(s), ${copy.fps ?? '?'} fps · ${copy.path}` : '';
-  $('p-repo-row').hidden = !(copy && repo);
-  $('p-repo').textContent = repo;
+  const repo = raw ? rawHubName() : hubName(ds);
+  if (raw) {
+    const last = info && info.raw_hub;
+    $('p-info').textContent = info && info.raw
+      ? `${info.raw} raw episode(s) in ${ds}/raw/` + (last ? ` · last uploaded ${last.pushed_at} (${last.episodes ?? '?'} episodes)` : ' · not uploaded yet')
+      : '';
+  } else {
+    $('p-info').textContent = copy
+      ? `${copy.episodes ?? '?'} episode(s), ${copy.fps ?? '?'} fps · ${copy.path}` : '';
+  }
+  const ready = raw ? info && info.raw : copy;
+  $('p-repo-row').hidden = !(ready && repo);
+  $('p-repo').textContent = raw ? `${repo} / ${ds}/` : repo;
+  $('p-public-row').hidden = raw;
+  $('p-raw-note').hidden = !raw;
   let reason = '';
   if (!s) reason = 'Connecting…';
-  else if (!s.scripts.push) reason = 'No push script found.';
+  else if (!(raw ? s.scripts.push_raw : s.scripts.push)) reason = raw ? 'webui/push_raw.py not found.' : 'No push script found.';
   else if (s.jobs.push.alive) reason = 'An upload is running.';
   else if (!ds) reason = 'Type the dataset name.';
   else if (!pValid()) reason = 'Fix the dataset name first.';
   else if (!info) reason = `No dataset called "${ds}".`;
-  else if (!copy) reason = `"${ds}" has not been converted yet. Convert it first.`;
-  else if (s.jobs.convert.alive && s.jobs.convert.meta.task === ds) reason = `"${ds}" is being converted. Wait for it to finish.`;
+  else if (raw && !info.raw) reason = `"${ds}" has no raw/ folder left (Sync deleted it, "Keep raw" was off). Nothing to upload.`;
+  else if (!raw && !copy) reason = `"${ds}" has not been converted yet. Convert it first.`;
+  else if (!raw && s.jobs.convert.alive && s.jobs.convert.meta.task === ds) reason = `"${ds}" is being converted. Wait for it to finish.`;
   else if (!repo) reason = 'Log in to Hugging Face first (see above).';
+  $('p-start').textContent = raw ? 'Push raw to Hub' : 'Push to Hub';
   $('p-start').disabled = !!reason;
   $('p-reason').textContent = reason;
   $('p-reason').classList.toggle('blocked', !!reason);
   if (s) {
     batchInstruction('p-instr', s.jobs.push, ds, reason,
-      {name: 'Upload', busy: 'Uploading', button: 'PUSH TO HUB', key: 'task'});
+      {name: 'Upload', busy: 'Uploading', button: raw ? 'PUSH RAW TO HUB' : 'PUSH TO HUB', key: 'task'});
   }
 }
 $('push-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   $('p-msg').innerHTML = '';
-  const res = await api('/api/push/start', {task: $('p-dataset').value.trim(), public: $('p-public').checked});
+  const res = await api('/api/push/start', {task: $('p-dataset').value.trim(), what: pWhat(),
+                                             public: pWhat() === 'raw' ? false : $('p-public').checked});
   if (!res.ok) showProblem($('p-msg'), res);
   refreshData();
 });

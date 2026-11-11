@@ -81,8 +81,12 @@
   <div class="panel st-done" id="c-done" hidden>
     <h2 id="c-done-title">Recording finished</h2>
     <p class="muted" id="c-done-text"></p>
+    <p class="small muted" id="c-done-hint">Sync now makes the synced episodes on this computer (for View and Convert).
+      Push raw data uploads the recordings as they are to a private <code>&lt;dataset&gt;_raw</code> repo on Hugging Face;
+      any computer can sync them later (Sync → Raw data from Hugging Face). You can do both.</p>
     <div class="row">
-      <button class="go big" type="button" id="c-next">Next: Synchronize →</button>
+      <button class="go big" type="button" id="c-next">Sync now →</button>
+      <button class="go big" type="button" id="c-push-raw">⤒ Push raw data to Hub</button>
       <button class="big" type="button" id="c-more">Record more episodes</button>
       <button class="stop big" type="button" id="c-stopnodes">■ Stop machines</button>
     </div>

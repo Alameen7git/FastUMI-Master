@@ -213,7 +213,7 @@ function updateCollectForm(s) {
   if ($('sub-tasks').hidden === false) {
     instruct('c-instr', '', 'Add the tasks you plan to record: type each one\'s number (T7, T4.1, …) and name. You can edit them later.');
   } else if (!$('c-done').hidden) {
-    instruct('c-instr', 'good', 'Recording finished. Go on to Synchronize, or record more episodes.');
+    instruct('c-instr', 'good', 'Recording finished. Sync now, push the raw data to Hugging Face, or record more episodes.');
   } else if (s.collect_blocked) {
     instruct('c-instr', 'bad', 'The machines are not ready yet.', {href: '/', label: '← Go to Machines'});
   } else {
@@ -319,6 +319,22 @@ $('c-next').onclick = async () => {
   doneHiddenFor = sessionKey(FUI.status);
   await api('/api/session/dismiss', {});
   goStep('#sync');
+};
+// Push the session's raw recordings straight to <user>/<dataset>_raw, then follow it on the Push page.
+$('c-push-raw').onclick = async () => {
+  const task = FUI.status && FUI.status.session.task;
+  if (!task) return;
+  const repo = rawHubName(task);
+  if (!repo) { alert('Not logged in to Hugging Face. Run "huggingface-cli login" in a terminal once, then try again.'); return; }
+  if (!confirm(`Upload the raw recordings of "${task}" to Hugging Face?\n\n${repo} (private)`)) return;
+  const res = await api('/api/push/start', {task, what: 'raw', public: false});
+  if (!res.ok) { alert(res.error); return; }
+  doneHiddenFor = sessionKey(FUI.status);
+  await api('/api/session/dismiss', {});
+  setField('p-dataset', task);
+  document.querySelector('input[name="p-what"][value="raw"]').checked = true;
+  goStep('#push');
+  refreshData();
 };
 document.addEventListener('fui:record-more', () => { $('c-more').click(); goStep('#collect'); showSub('record'); });
 

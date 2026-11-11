@@ -238,8 +238,16 @@ def _is_error(line):
     return any(h in line for h in ERROR_HINTS)
 
 
+FETCH_RAW_RE = re.compile(r'^\[(\d+)/(\d+)\] \S+ (?:downloaded|already here)')
+
+
 def sync_line(job, line):
     p = job.progress
+    m = FETCH_RAW_RE.search(line)
+    if m and job.meta.get('from_hub') and not p.get('total'):
+        n, of = int(m.group(1)), int(m.group(2))
+        p.update(percent=round(100.0 * n / of), step='downloading from Hugging Face: {}/{} files'.format(n, of))
+        return
     m = SYNC_FOUND_RE.search(line)
     if m:
         p.update(total=int(m.group(1)), done=0, skipped=0, failed=0)
@@ -952,8 +960,9 @@ def api_status():
         'updates_pending': sorted(pending_updates),
         'last_recorded': None if JOBS['collection'].alive() else last_recorded(),
         'scripts': {'sync': S.SYNC_SCRIPT, 'convert': S.CONVERT_SCRIPT, 'replay': S.REPLAY_SCRIPT,
-                    'viz': S.VIZ_SCRIPT, 'push': S.PUSH_SCRIPT, 'push_raw': S.RAW_PUSH_SCRIPT},
-        'raw_hub_name': S.RAW_HUB_NAME,
+                    'viz': S.VIZ_SCRIPT, 'push': S.PUSH_SCRIPT, 'push_raw': S.RAW_PUSH_SCRIPT,
+                    'fetch_raw': S.RAW_FETCH_SCRIPT},
+        'raw_hub_suffix': S.RAW_HUB_SUFFIX,
         'now': time.time(),
         'replay_passed': replay_passed,
         'viz_url': 'http://{}:{}/'.format(request.host.split(':')[0], S.VIZ_PORT),
@@ -1309,6 +1318,20 @@ def _task_from_body(body, need_key):
     return task, None
 
 
+def _task_from_hub(repo):
+    """Sync "From Hugging Face": <user>/<dataset>_raw -> (<dataset>, None), or (None, error)."""
+    if S.RAW_FETCH_SCRIPT is None:
+        return None, bad('webui/fetch_raw.py not found in this checkout.')
+    if not REPO_ID_RE.match(repo) or not repo.endswith(S.RAW_HUB_SUFFIX):
+        return None, bad('Type the raw-data repo as user/<dataset>{} (made by Push → Raw recordings).'.format(
+            S.RAW_HUB_SUFFIX))
+    task = repo.split('/')[1][:-len(S.RAW_HUB_SUFFIX)]
+    problem = validate_name(task)
+    if problem:
+        return None, bad(problem['error'], problem=problem)
+    return task, None
+
+
 @app.route('/api/sync/<action>', methods=['POST'])
 def api_sync(action):
     job = JOBS['sync']
@@ -1320,7 +1343,11 @@ def api_sync(action):
     if JOBS['collection'].alive():
         return bad('Wait for the data collection session to finish before synchronizing.')
     body = request.get_json(force=True, silent=True) or {}
-    task, err = _task_from_body(body, 'raw')
+    repo = (body.get('from_hub') or '').strip()
+    if repo:
+        task, err = _task_from_hub(repo)
+    else:
+        task, err = _task_from_body(body, 'raw')
     if err:
         return err
     try:
@@ -1330,7 +1357,11 @@ def api_sync(action):
     cmd = S.FASTUMI_PREFIX + 'exec python3 -u {} --task {} --parallel {} --fps {}{}'.format(
         S.SYNC_SCRIPT, shlex.quote(task), parallel, S.DATASET_FPS,
         ' --keep-raw' if body.get('keep_raw', True) else '')
-    good, why = job.start(cmd, meta={'task': task})
+    if repo:   # download first (base env), then Sync as usual
+        cmd = '{} -u {} --repo-id {} --dest {} && echo ">>> SYNC" && {}'.format(
+            shlex.quote(S.LEROBOT_PY), shlex.quote(S.RAW_FETCH_SCRIPT), shlex.quote(repo),
+            shlex.quote(os.path.join(S.DATA_DIR, task)), cmd)
+    good, why = job.start(cmd, meta={'task': task, 'from_hub': repo or None})
     return ok() if good else bad(why)
 
 
@@ -2005,14 +2036,36 @@ def remember_push(job):
             write_export(task, hub=rec)
 
 
-def raw_hub_target(public=False):
-    """({repo_id, public}, None): where raw recordings go, <user>/umi_raw; or (None, why)."""
+def raw_hub_target(task, public=False):
+    """({repo_id, public}, None): where a dataset's raw recordings go, <user>/<dataset>_raw; or (None, why)."""
     user = hf_whoami().get('user')
     if not user:
         return None, ('Not logged in to Hugging Face. Run "huggingface-cli login" in a terminal once, '
                       'then try again.')
-    repo_id = '{}/{}'.format(user, S.RAW_HUB_NAME)
-    return {'repo_id': repo_id, 'public': bool(public)}, check_repo_id(repo_id)
+    repo_id = '{}/{}{}'.format(user, task, S.RAW_HUB_SUFFIX)
+    why = check_repo_id(repo_id)
+    return (None, why) if why else ({'repo_id': repo_id, 'public': bool(public)}, None)
+
+
+_rawhub_cache = {'t': 0, 'data': None}
+
+
+@app.route('/api/rawhub')
+def api_rawhub():
+    """The logged-in user's raw-data repos (<user>/*_raw) on the Hub, for Sync "From Hugging Face"."""
+    if _rawhub_cache['data'] is None or time.time() - _rawhub_cache['t'] > 60 or request.args.get('refresh'):
+        user = hf_whoami().get('user')
+        if not user:
+            return ok(repos=[], user=None)
+        code = ('import json, sys\nfrom huggingface_hub import HfApi\n'
+                'print(json.dumps([d.id for d in HfApi().list_datasets(author=sys.argv[1])]))')
+        try:
+            r = subprocess.run([S.LEROBOT_PY, '-c', code, user], capture_output=True, text=True, timeout=30)
+            repos = [x for x in json.loads(r.stdout.strip().splitlines()[-1]) if x.endswith(S.RAW_HUB_SUFFIX)]
+        except Exception as e:
+            return bad('Could not list your Hugging Face datasets ({}).'.format(str(e).splitlines()[0][:200]))
+        _rawhub_cache.update(t=time.time(), data={'repos': sorted(repos), 'user': user})
+    return ok(**_rawhub_cache['data'])
 
 
 def start_raw_push(job, body):
@@ -2024,7 +2077,7 @@ def start_raw_push(job, body):
     col = JOBS['collection']
     if col.alive() and col.meta.get('task') == task:
         return bad('"{}" is being recorded right now. Finish the session first.'.format(task))
-    push, why = raw_hub_target(body.get('public'))
+    push, why = raw_hub_target(task, body.get('public'))
     if why:
         return bad(why)
     cmd = '{} -u {} --repo-id {} --dataset-dir {}{}'.format(

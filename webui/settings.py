@@ -238,8 +238,11 @@ JUMP_ALERT_S = 15
 LEROBOT_PY = os.path.join(CONDA_BASE, 'bin', 'python3')   # [CONFIRMED] make_replay_dataset.sh
 PUSH_SCRIPT = _first_existing('webui/push_to_hub.py', 'replay_pipeline/push_dataset_to_hub.py')
 # Push tab, "Raw recordings": webui/push_raw.py uploads <dataset>/raw/ (+ csv/,
-# states.csv) into <logged-in user>/<RAW_HUB_NAME>/<dataset>/, one private repo
-# for every dataset. Sync rebuilds the synced episode_N.hdf5 from raw/, so the
-# hdf5 (about 10x bigger) need not be kept or uploaded.
+# states.csv) to <logged-in user>/<dataset><RAW_HUB_SUFFIX>, a private repo per
+# dataset next to the LeRobot one (<user>/<dataset>). Sync rebuilds the synced
+# episode_N.hdf5 from raw/, so the hdf5 (about 10x bigger) need not be uploaded.
+# Sync tab, "From Hugging Face": webui/fetch_raw.py downloads such a repo into
+# <data_dir>/<dataset>/ and Sync runs on it.
 RAW_PUSH_SCRIPT = _first_existing('webui/push_raw.py')
-RAW_HUB_NAME = 'umi_raw'
+RAW_FETCH_SCRIPT = _first_existing('webui/fetch_raw.py')
+RAW_HUB_SUFFIX = '_raw'

@@ -663,24 +663,65 @@ function setField(id, value) {
 // ── Synchronize ─────────────────────────────────────────────────────────────
 const sValid = attachNameValidation($('s-task'), $('s-name-msg'), () => updateAll(FUI.status), 'Dataset name');
 
+// Sync "From Hugging Face": a <user>/<dataset>_raw repo made by Push → Raw recordings.
+const sFromHub = () => document.querySelector('input[name="s-from"]:checked').value === 'hub';
+let RAWHUB = null;
+async function loadRawHub(refresh) {
+  $('s-hub-info').textContent = 'Looking for your raw-data repos on Hugging Face…';
+  const r = await api('/api/rawhub' + (refresh ? '?refresh=1' : ''));
+  RAWHUB = r.ok ? r : {repos: []};
+  const list = $('s-hub-list');
+  list.innerHTML = '';
+  for (const repo of RAWHUB.repos) list.append(el('option', {value: repo}));
+  if (FUI.status) updateAll(FUI.status);
+}
+document.querySelectorAll('input[name="s-from"]').forEach(r => r.addEventListener('change', () => {
+  $('s-local').hidden = sFromHub();
+  $('s-hub-box').hidden = !sFromHub();
+  if (sFromHub() && !RAWHUB) loadRawHub(false);
+  updateAll(FUI.status);
+}));
+$('s-hub').addEventListener('input', () => updateAll(FUI.status));
+$('s-hub-refresh').onclick = () => loadRawHub(true);
+
+function syncHubTask(repo) {
+  const sfx = rawSuffix(), name = repo.split('/')[1] || '';
+  return /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/.test(repo) && name.endsWith(sfx) && name.length > sfx.length
+    ? name.slice(0, -sfx.length) : '';
+}
+
 function updateSyncForm(s) {
-  const task = $('s-task').value, info = TASKS[task];
-  $('s-info').textContent = info ? `${info.raw} recorded episode(s) waiting, ${info.synced} already synced.` : '';
+  const hub = sFromHub(), repo = $('s-hub').value.trim();
+  const task = hub ? syncHubTask(repo) : $('s-task').value, info = TASKS[task];
+  $('s-info').textContent = !hub && info ? `${info.raw} recorded episode(s) waiting, ${info.synced} already synced.` : '';
+  if (hub) {
+    $('s-hub-info').textContent = !RAWHUB ? 'Looking for your raw-data repos on Hugging Face…'
+      : task ? `Downloads into ${$('s-hub-box').dataset.dir}/${task}/, then syncs it` +
+               (info ? ` (${task} is already here: ${info.raw} raw, ${info.synced} synced; files already here are skipped).` : '.')
+      : RAWHUB.repos.length ? `Your raw-data repos: ${RAWHUB.repos.join(', ')}`
+      : (RAWHUB.user ? 'No raw-data repos (<dataset>_raw) found on your account yet.' : 'Not logged in to Hugging Face.');
+  }
   let reason = '';
   if (!s) reason = 'Connecting…';
   else if (!s.scripts.sync) reason = 'convert_episodes.py not found in this checkout.';
+  else if (hub && !s.scripts.fetch_raw) reason = 'webui/fetch_raw.py not found in this checkout.';
   else if (s.jobs.collection.alive) reason = 'Wait until recording is finished.';
   else if (s.jobs.sync.alive) reason = 'Sync is running.';
+  else if (hub && !repo) reason = 'Type or pick the raw-data repo (user/<dataset>_raw).';
+  else if (hub && !task) reason = `Type it as user/<dataset>${rawSuffix()}.`;
+  else if (hub) reason = '';
   else if (!sValid()) reason = task ? 'Fix the dataset name first.' : 'Type or pick the dataset you recorded.';
   else if (!info) reason = `No dataset called "${task}".`;
   else if (!info.raw) reason = `"${task}" has nothing left to sync.`;
+  $('s-start').textContent = hub ? '⤓ Download & sync' : 'Sync now';
   $('s-start').disabled = !!reason;
   $('s-reason').textContent = reason;
   $('s-reason').classList.toggle('blocked', !!reason);
   if (!s) return;
   const job = s.jobs.sync;
   $('s-next-box').hidden = !(job.state === 'done' && job.meta.task);
-  batchInstruction('s-instr', job, task, reason, {name: 'Sync', busy: 'Syncing', button: 'SYNC NOW', key: 'task'});
+  batchInstruction('s-instr', job, task, reason, {name: 'Sync', busy: hub ? 'Downloading and syncing' : 'Syncing',
+                                                 button: hub ? 'DOWNLOAD & SYNC' : 'SYNC NOW', key: 'task'});
 }
 
 $('sync-form').addEventListener('submit', async ev => {
@@ -690,6 +731,7 @@ $('sync-form').addEventListener('submit', async ev => {
       !confirm('The raw video files for each synced episode will be DELETED. Continue?')) return;
   const res = await api('/api/sync/start', {
     task: $('s-task').value, parallel: $('s-parallel').value, keep_raw: $('s-keep').checked,
+    from_hub: sFromHub() ? $('s-hub').value.trim() : '',
   });
   if (!res.ok) showProblem($('s-msg'), res);
 });
@@ -790,13 +832,14 @@ const pValid = attachNameValidation($('p-dataset'), $('p-name-msg'), () => updat
 
 const pWhat = () => document.querySelector('input[name="p-what"]:checked').value;
 document.querySelectorAll('input[name="p-what"]').forEach(r => r.addEventListener('change', () => updateAll(FUI.status)));
-// Raw recordings of every dataset go to <user>/umi_raw/<dataset>/.
-const rawHubName = () => HF && HF.user ? `${HF.user}/${FUI.status ? FUI.status.raw_hub_name : 'umi_raw'}` : '';
+// A dataset's raw recordings go to <user>/<dataset>_raw (next to the LeRobot repo <user>/<dataset>).
+const rawSuffix = () => (FUI.status && FUI.status.raw_hub_suffix) || '_raw';
+const rawHubName = task => HF && HF.user && task ? `${HF.user}/${task}${rawSuffix()}` : '';
 
 function updatePushForm(s) {
   const ds = $('p-dataset').value.trim(), info = TASKS[ds], raw = pWhat() === 'raw';
   const copy = info && (info.lerobot.find(l => l.name === ds + '/lerobot') || info.lerobot.find(l => l.name === ds + '_lerobot'));
-  const repo = raw ? rawHubName() : hubName(ds);
+  const repo = raw ? rawHubName(ds) : hubName(ds);
   if (raw) {
     const last = info && info.raw_hub;
     $('p-info').textContent = info && info.raw
@@ -808,8 +851,7 @@ function updatePushForm(s) {
   }
   const ready = raw ? info && info.raw : copy;
   $('p-repo-row').hidden = !(ready && repo);
-  $('p-repo').textContent = raw ? `${repo} / ${ds}/` : repo;
-  $('p-public-row').hidden = raw;
+  $('p-repo').textContent = repo;
   $('p-raw-note').hidden = !raw;
   let reason = '';
   if (!s) reason = 'Connecting…';
@@ -835,7 +877,7 @@ $('push-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   $('p-msg').innerHTML = '';
   const res = await api('/api/push/start', {task: $('p-dataset').value.trim(), what: pWhat(),
-                                             public: pWhat() === 'raw' ? false : $('p-public').checked});
+                                             public: $('p-public').checked});
   if (!res.ok) showProblem($('p-msg'), res);
   refreshData();
 });

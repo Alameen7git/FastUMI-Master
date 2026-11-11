@@ -209,13 +209,30 @@
   <h2>Synchronize</h2>
   <p class="muted" style="margin-top:0">Lines up the video frames with the motion tracker so every picture has the right position.</p>
   <form id="sync-form" autocomplete="off">
-    <div class="form-grid" style="grid-template-columns:1fr">
-      <label class="field">Dataset
-        <input type="text" id="s-task" placeholder="Type the dataset name" autocomplete="off">
-      </label>
+    <div class="ds-choice" style="margin-bottom:12px">
+      <label class="check"><input type="radio" name="s-from" value="local" checked> Raw data on this computer</label>
+      <label class="check"><input type="radio" name="s-from" value="hub">
+        Raw data from Hugging Face (a <code>&lt;dataset&gt;_raw</code> repo made by Push → Raw recordings)</label>
     </div>
-    <div id="s-name-msg"></div>
-    <div class="small muted" id="s-info"></div>
+    <div id="s-local">
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <label class="field">Dataset
+          <input type="text" id="s-task" placeholder="Type the dataset name" autocomplete="off">
+        </label>
+      </div>
+      <div id="s-name-msg"></div>
+      <div class="small muted" id="s-info"></div>
+    </div>
+    <div id="s-hub-box" hidden data-dir="{{ S.DATA_DIR.rstrip('/') }}">
+      <div class="row" style="align-items:flex-end">
+        <label class="field grow">Hugging Face raw-data repo
+          <input type="text" id="s-hub" list="s-hub-list" placeholder="e.g. Nityavedula/Insert_the_RAM_stick_raw" autocomplete="off">
+        </label>
+        <button class="small" type="button" id="s-hub-refresh">↻ Refresh list</button>
+      </div>
+      <datalist id="s-hub-list"></datalist>
+      <div class="small muted" id="s-hub-info" style="margin-top:6px"></div>
+    </div>
     <div class="row" style="margin-top:18px">
       <button class="go huge" id="s-start" type="submit">Sync now</button>
       <button class="stop big" id="s-stop" type="button" disabled>■ Stop</button>
@@ -375,10 +392,10 @@
     <div class="small muted" id="p-info" style="margin-top:8px"></div>
     <div class="hub-name" id="p-repo-row" hidden>Uploads to <strong id="p-repo">…</strong></div>
     <label class="check" style="margin-top:12px" id="p-public-row"><input type="checkbox" id="p-public"> Make it public (default: private)</label>
-    <div class="small muted" id="p-raw-note" hidden style="margin-top:10px">Raw recordings of every dataset go into one
-      private repo, each dataset in its own folder. Only <code>raw/</code>, <code>csv/</code>, <code>camera/</code>,
+    <div class="small muted" id="p-raw-note" hidden style="margin-top:10px">Raw recordings go to their own repo,
+      <code>&lt;dataset&gt;_raw</code>, next to the LeRobot one. Only <code>raw/</code>, <code>csv/</code>, <code>camera/</code>,
       <code>states.csv</code> and <code>deleted_episodes.json</code> are uploaded; files already on the Hub are skipped and never
-      deleted. To get the synced <code>episode_N.hdf5</code> back later, download the folder into the data folder and run Sync.</div>
+      deleted. To get the synced <code>episode_N.hdf5</code> back on any computer: Sync → Raw data from Hugging Face.</div>
     <div class="row" style="margin-top:18px">
       <button class="go huge" id="p-start" type="submit">Push to Hub</button>
       <button class="stop big" id="p-stop" type="button" disabled>■ Stop</button>

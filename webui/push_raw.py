@@ -2,10 +2,10 @@
 """
 Upload a dataset's raw recordings to the Hugging Face Hub (conda base env).
 
-    python push_raw.py --repo-id <user>/umi_raw --dataset-dir <data_dir>/<dataset> [--public]
+    python push_raw.py --repo-id <user>/<dataset>_raw --dataset-dir <data_dir>/<dataset> [--public]
 
-Uploads into <repo>/<dataset>/ only what Sync needs to rebuild the synced
-episode_N.hdf5 files:
+Uploads to the repo (one per dataset, next to the LeRobot repo <user>/<dataset>)
+only what Sync needs to rebuild the synced episode_N.hdf5 files:
     raw/episode_N/{video.mp4, trajectory.csv, timestamps.csv}
     csv/, camera/, states.csv, deleted_episodes.json
 The synced hdf5 files (10x bigger) and converted copies are left out. Files
@@ -49,11 +49,11 @@ def main():
     if not episodes:
         sys.exit('ERROR: {} has no raw/episode_N folders to upload.'.format(root))
     total = sum(files.values())
-    print('{}: {} raw episode(s), {} files, {:.2f} GB -> {}/{}/'.format(
-        name, len(episodes), len(files), total / 1e9, args.repo_id, name), flush=True)
+    print('{}: {} raw episode(s), {} files, {:.2f} GB -> {}'.format(
+        name, len(episodes), len(files), total / 1e9, args.repo_id), flush=True)
 
     hf = os.path.join(os.path.dirname(sys.executable), 'hf')
-    cmd = [hf, 'upload', args.repo_id, root, name, '--repo-type', 'dataset',
+    cmd = [hf, 'upload', args.repo_id, root, '.', '--repo-type', 'dataset',
            '--no-private' if args.public else '--private',
            '--commit-message', 'Raw data: {} ({} episodes)'.format(name, len(episodes))]
     for p in INCLUDE:   # fnmatch, like local_files(): raw/* covers raw/episode_N/*
@@ -65,8 +65,8 @@ def main():
     print('Checking the files on Hugging Face ...', flush=True)
     info = HfApi().dataset_info(args.repo_id, files_metadata=True)
     remote = {s.rfilename: s.size for s in info.siblings}
-    missing = [k for k in files if name + '/' + k not in remote]
-    wrong = [k for k in files if name + '/' + k in remote and remote[name + '/' + k] != files[k]]
+    missing = [k for k in files if k not in remote]
+    wrong = [k for k in files if k in remote and remote[k] != files[k]]
     for k in missing:
         print('ERROR: missing on the Hub: {}'.format(k), flush=True)
     for k in wrong:
@@ -75,7 +75,7 @@ def main():
         sys.exit('ERROR: {} file(s) missing, {} with the wrong size.'.format(len(missing), len(wrong)))
     print('Verified: all {} files ({} episodes, {:.2f} GB) are on the Hub ({}).'.format(
         len(files), len(episodes), total / 1e9, 'private' if info.private else 'public'), flush=True)
-    print('Pushed to: https://huggingface.co/datasets/{}/tree/main/{}'.format(args.repo_id, name), flush=True)
+    print('Pushed to: https://huggingface.co/datasets/{}'.format(args.repo_id), flush=True)
 
 
 if __name__ == '__main__':

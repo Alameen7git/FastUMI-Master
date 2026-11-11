@@ -138,10 +138,14 @@ in the conda `base` env (Convert / Push).
   result.
 - **Push**: a separate page uploads any LeRobot dataset folder.
 - **Push raw**: on the Push page, *Raw recordings* uploads `<dataset>/raw/` (+ `csv/`, `camera/`,
-  `states.csv`, `deleted_episodes.json`) with `webui/push_raw.py` into one private repo,
-  `<user>/umi_raw/<dataset>/`. The synced `episode_N.hdf5` are left out (about 10x bigger; Sync rebuilds
-  them from `raw/`). Unchanged files are skipped, nothing on the Hub is deleted, and every file is
-  checked on the Hub afterwards. The last raw upload is kept in `lerobot_export.json` (`raw_hub`).
+  `states.csv`, `deleted_episodes.json`) with `webui/push_raw.py` to a private repo
+  `<user>/<dataset>_raw`, next to the LeRobot repo `<user>/<dataset>`. The synced `episode_N.hdf5` are
+  left out (about 10x bigger; Sync rebuilds them from `raw/`). Unchanged files are skipped, nothing on
+  the Hub is deleted, and every file is checked on the Hub afterwards. The last raw upload is kept in
+  `lerobot_export.json` (`raw_hub`).
+- **Sync from Hugging Face**: on the Sync page, *Raw data from Hugging Face* takes a
+  `<user>/<dataset>_raw` repo (your repos are listed), downloads it into `<data_dir>/<dataset>/` with
+  `webui/fetch_raw.py` (files already there are skipped, every file is size-checked) and then syncs it.
 
 ## What each step runs
 
